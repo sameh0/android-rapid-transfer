@@ -1,0 +1,72 @@
+# Builds and tests both Swift packages on every push to main and
+# on every pull request. The work is done by
+# native/AndroidRapidTransfer/Scripts/ci-build.sh, which runs the same way on
+# a Mac: `Scripts/ci-build.sh test`.
+#
+# Toolchain, as repository variables (Settings > Secrets and variables >
+# Actions > Variables), both optional:
+#   ART_MACOS_RUNNER   runner label; default macos-26. `xcode-27` is GitHub's
+#                      Xcode 27 preview image.
+#   ART_XCODE_VERSION  Xcode to select; default `latest` (newest release Xcode
+#                      on the runner). Also `latest-prerelease` or a version
+#                      such as 26.6. See Scripts/ci-select-xcode.sh.
+#   ART_WARNINGS_AS_ERRORS  0 lets compiler warnings through (default 1).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  XCODE_VERSION: ${{ vars.ART_XCODE_VERSION || 'latest' }}
+  ART_CI_OUTPUT_DIR: ${{ github.workspace }}/ci-output
+  # Compiler warnings fail the build; set the variable to 0 to allow them.
+  ART_WARNINGS_AS_ERRORS: ${{ vars.ART_WARNINGS_AS_ERRORS || '1' }}
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ${{ vars.ART_MACOS_RUNNER || 'macos-26' }}
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode
+        id: xcode
+        run: native/AndroidRapidTransfer/Scripts/ci-select-xcode.sh "$XCODE_VERSION"
+
+      # Keyed on the exact Xcode build: products of another compiler are useless.
+      - name: Cache SwiftPM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            native/AndroidRapidTransfer/.build
+            native/MTPKit/.build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-test-${{ runner.os }}-${{ runner.arch }}-xcode-${{ steps.xcode.outputs.build }}-${{ hashFiles('native/*/Package.resolved', 'native/*/Package.swift') }}
+          restore-keys: |
+            spm-test-${{ runner.os }}-${{ runner.arch }}-xcode-${{ steps.xcode.outputs.build }}-
+
+      - name: Build and test
+        run: native/AndroidRapidTransfer/Scripts/ci-build.sh test
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ART_CI_OUTPUT_DIR }}/logs
+          if-no-files-found: ignore
+          retention-days: 14

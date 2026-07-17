@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+._*
+
+# Editors
+.idea/
+
+# Logs, local environment and scratch
+*.log
+.env*
+tmp/
+
+# Swift Package Manager / Xcode (native/AndroidRapidTransfer and native/MTPKit also ignore
+# their own .build/, dist/ and release/ output)
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/worktrees/
+
+# Local plans, handoffs and measurement records (never committed)
+claudedocs/

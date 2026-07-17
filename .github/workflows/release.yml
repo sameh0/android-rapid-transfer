@@ -1,0 +1,218 @@
+# Produces the distributable app: a universal Android Rapid Transfer.app in a
+# DMG, with SHA256SUMS and build-info.txt, uploaded as a workflow artifact.
+#
+#   push to main       a "nightly" ad-hoc build (artifact kept 14 days)
+#   workflow_dispatch  a build of the chosen ref, signed when secrets allow
+#   push of a v* tag   a release build, signed when secrets allow, attached to
+#                      a DRAFT GitHub release (never published automatically)
+#
+# Everything is done by native/AndroidRapidTransfer/Scripts/ci-build.sh
+# (`package`, then `appcast`), which runs the same way on a Mac.
+#
+# Secrets, all optional; without them the DMG is ad-hoc signed and every
+# signing, notarization and appcast step says what it skipped and why. The
+# checklist is in native/AndroidRapidTransfer/DISTRIBUTION.md:
+#   DEVELOPER_ID_P12_BASE64, DEVELOPER_ID_P12_PASSWORD   Developer ID certificate
+#   DEVELOPER_ID_APP (optional; read from the certificate)
+#   APPLE_ID, TEAM_ID, APP_PASSWORD                      notarization, Apple ID
+#   NOTARY_API_KEY_P8_BASE64, NOTARY_API_KEY_ID,
+#   NOTARY_API_ISSUER_ID                                 notarization, API key
+#   SPARKLE_ED_PRIVATE_KEY                               appcast signing (tags)
+#
+# Repository variables, all optional: ART_MACOS_RUNNER, ART_XCODE_VERSION (see
+# ci.yml) and ART_REQUIRE_SIGNING=1 (a tag build fails rather than falling
+# back to ad-hoc).
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign and notarize when the secrets are present
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  # A newer main push supersedes a nightly; a tag build always finishes.
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  XCODE_VERSION: ${{ vars.ART_XCODE_VERSION || 'latest' }}
+
+jobs:
+  package:
+    name: Package DMG
+    runs-on: ${{ vars.ART_MACOS_RUNNER || 'macos-26' }}
+    timeout-minutes: 90
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      build-number: ${{ steps.package.outputs.build-number }}
+      signing: ${{ steps.package.outputs.signing }}
+      prerelease: ${{ steps.package.outputs.prerelease }}
+      artifact-name: ${{ steps.package.outputs.artifact-name }}
+    env:
+      ART_CI_OUTPUT_DIR: ${{ github.workspace }}/ci-output
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The build number (CFBundleVersion) is the commit count of HEAD.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Xcode
+        id: xcode
+        run: native/AndroidRapidTransfer/Scripts/ci-select-xcode.sh "$XCODE_VERSION"
+
+      # Only dependency checkouts and the Sparkle download are cached; release
+      # binaries are always compiled from scratch.
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            native/AndroidRapidTransfer/.build/artifacts
+            native/AndroidRapidTransfer/.build/checkouts
+            native/AndroidRapidTransfer/.build/repositories
+            native/AndroidRapidTransfer/.build/workspace-state.json
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-deps-${{ runner.os }}-${{ hashFiles('native/*/Package.resolved', 'native/*/Package.swift') }}
+
+      - name: Import signing credentials
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.sign)
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          DEVELOPER_ID_APP: ${{ secrets.DEVELOPER_ID_APP }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          NOTARY_API_KEY_P8_BASE64: ${{ secrets.NOTARY_API_KEY_P8_BASE64 }}
+        run: native/AndroidRapidTransfer/Scripts/ci-credentials.sh setup
+
+      # DEVELOPER_ID_APP, TEAM_ID and NOTARY_API_KEY_PATH come from the step
+      # above (via GITHUB_ENV), so they must not be set here.
+      - name: Package
+        id: package
+        env:
+          ART_SIGNING: ${{ (github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.sign)) && 'auto' || 'adhoc' }}
+          ART_REQUIRE_SIGNING: ${{ github.ref_type == 'tag' && vars.ART_REQUIRE_SIGNING || '0' }}
+          ART_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: native/AndroidRapidTransfer/Scripts/ci-build.sh package
+
+      - name: Sparkle appcast
+        if: github.ref_type == 'tag'
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: native/AndroidRapidTransfer/Scripts/ci-build.sh appcast "$GITHUB_REF_NAME"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.package.outputs.artifact-name }}
+          path: |
+            ${{ env.ART_CI_OUTPUT_DIR }}/*.dmg
+            ${{ env.ART_CI_OUTPUT_DIR }}/appcast.xml
+            ${{ env.ART_CI_OUTPUT_DIR }}/SHA256SUMS
+            ${{ env.ART_CI_OUTPUT_DIR }}/build-info.txt
+          if-no-files-found: error
+          retention-days: ${{ github.ref_type == 'tag' && 90 || 14 }}
+          # A DMG is already compressed.
+          compression-level: 0
+
+      - name: Upload packaging logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ART_CI_OUTPUT_DIR }}/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Remove signing credentials
+        if: always()
+        run: native/AndroidRapidTransfer/Scripts/ci-credentials.sh cleanup
+
+  draft-release:
+    name: Draft GitHub release
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download DMG
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+          path: dist
+
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.package.outputs.version }}
+          SIGNING: ${{ needs.package.outputs.signing }}
+          PRERELEASE: ${{ needs.package.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c SHA256SUMS
+          ls -l
+
+          {
+            echo "Android Rapid Transfer $VERSION for macOS 14 or later (Apple silicon and Intel)."
+            echo
+            if [[ "$SIGNING" != developer-id ]]; then
+              echo "> [!WARNING]"
+              echo "> This build is **ad-hoc signed**: it is not signed with a Developer ID and not notarized,"
+              echo "> so macOS Gatekeeper will warn when it is first opened. See DISTRIBUTION.md."
+              echo
+            fi
+            echo "### SHA-256"
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+            echo
+            echo "<details><summary>Build information</summary>"
+            echo
+            echo '```'
+            grep -v '^#' build-info.txt
+            echo '```'
+            echo
+            echo "</details>"
+          } > release-notes.md
+
+          assets=(*.dmg SHA256SUMS build-info.txt)
+          [[ -f appcast.xml ]] && assets+=(appcast.xml)
+
+          if gh release view "$TAG" --json isDraft --jq .isDraft > is-draft.txt 2>/dev/null; then
+            if [[ "$(cat is-draft.txt)" != true ]]; then
+              echo "::error::Release $TAG is already published; refusing to change it."
+              exit 1
+            fi
+            echo "Updating the existing draft release $TAG."
+            gh release edit "$TAG" --notes-file release-notes.md
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            prerelease_flag=()
+            [[ "$PRERELEASE" == true ]] && prerelease_flag=(--prerelease)
+            gh release create "$TAG" "${assets[@]}" \
+              --draft \
+              --verify-tag \
+              --title "Android Rapid Transfer $VERSION" \
+              --notes-file release-notes.md \
+              "${prerelease_flag[@]}"
+          fi
+          echo "Draft release $TAG is ready for review; publish it by hand."
