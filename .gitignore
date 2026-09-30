@@ -20,6 +20,3 @@ xcuserdata/
 # Claude Code local state
 .claude/settings.local.json
 .claude/worktrees/
-
-# Local plans, handoffs and measurement records (never committed)
-claudedocs/
