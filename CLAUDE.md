@@ -8,8 +8,9 @@ Android and Mac, bundle ID `com.sameh.AndroidRapidTransfer`, repository
 (Swift) and `Scripts/release-config.sh` (packaging), kept in step by
 `AppIdentityTests`.
 
-Layout: `native/AndroidRapidTransfer` (SwiftUI app `AndroidRapidTransfer`, core
-library `AndroidRapidTransferCore`, tests, packaging scripts, device probes),
+Layout: `native/AndroidRapidTransfer` (SwiftUI app `AndroidRapidTransfer`, its tests,
+packaging scripts), `native/ARTCore` (platform-neutral core library
+`AndroidRapidTransferCore`, its tests and the device probes; builds on macOS and Linux),
 `native/MTPKit` (library `MTPKit`: the `MTPDeviceProvider` protocol, models, errors
 and `MockMTPProvider`; `SwiftMTP`: the pure-Swift MTP engine over IOUSBHost,
 `SwiftMTPProvider`; `USBWatcher`: USB hotplug). `docs/media` holds the README's
@@ -23,7 +24,8 @@ self-contained.
 - **`DEVELOPER_DIR` is mandatory** when `xcode-select` points at Command Line Tools:
   they ship no `libSwiftUIMacros.dylib`, so every `@State` fails to expand. Use
   `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
-- `cd native/AndroidRapidTransfer && swift build && swift test`; same in `native/MTPKit`.
+- `cd native/AndroidRapidTransfer && swift build && swift test`; same in `native/ARTCore` and
+  `native/MTPKit` (both also build and test on Linux).
 - Run: `swift run AndroidRapidTransfer` (real device) or `swift run AndroidRapidTransfer --mock`
   (a built-in mock phone; debug builds add a Debug menu for failure injection).
 - Dev bundle: `native/AndroidRapidTransfer/make-app.sh` → `native/AndroidRapidTransfer/dist/Android Rapid Transfer.app`.
@@ -51,7 +53,7 @@ self-contained.
 ## Device testing (physical phone)
 
 - Probes: `ScanProbe`, `RecursiveWalkProbe`, `SeedTestPhotos`, `LifecycleProbe` in
-  `native/AndroidRapidTransfer`; `mtp-probe`, `swift-provider-probe` in `native/MTPKit`.
+  `native/ARTCore`; `mtp-probe`, `swift-provider-probe` in `native/MTPKit`.
 - **A run counts only if it completes**: require its completion marker
   (`^VERIFICATION` / `^COMPARABILITY`). `SIGSEGV`, `fatal error:`, or exit code > 1
   is a crash — never count those as passes, and never
