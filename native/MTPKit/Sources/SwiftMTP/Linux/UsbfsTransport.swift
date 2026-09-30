@@ -185,6 +185,39 @@ final class UsbfsReaper: @unchecked Sendable {
     }
 }
 
+/// The retry schedule of `UsbfsTransport.open`: a busy interface waits for
+/// its holder to let go, and a node not yet accessible waits (briefly) for
+/// udev to grant access. Everything else fails at once.
+public enum UsbfsOpenRetry {
+    /// 0.85 s in all: udev applies its ACL within milliseconds of the node
+    /// appearing, so a longer wait would only delay a real permission error.
+    public static let permissionDelays: [TimeInterval] = [0.1, 0.25, 0.5]
+
+    static func run<T>(busyDelays: [TimeInterval], permissionDelays: [TimeInterval],
+                       sleep: (TimeInterval) -> Void, log: ((String) -> Void)?,
+                       _ attempt: () throws -> T) throws -> T {
+        var busyAttempts = 0
+        var permissionAttempts = 0
+        while true {
+            do {
+                return try attempt()
+            } catch let error as MTPTransportError where error.kind == .exclusiveAccess {
+                guard busyAttempts < busyDelays.count else { throw error }
+                let delay = busyDelays[busyAttempts]
+                log?("open attempt failed: \(error); retrying in \(delay) s (no reset)")
+                sleep(delay)
+                busyAttempts += 1
+            } catch let error as MTPTransportError where error.kind == .notPermitted {
+                guard permissionAttempts < permissionDelays.count else { throw error }
+                let delay = permissionDelays[permissionAttempts]
+                log?("open attempt failed: \(error); retrying in \(delay) s (udev may not have granted access yet)")
+                sleep(delay)
+                permissionAttempts += 1
+            }
+        }
+    }
+}
+
 /// Bulk/interrupt/control I/O on one MTP interface through Linux usbfs
 /// (`/dev/bus/usb/BBB/DDD`).
 ///
@@ -225,20 +258,19 @@ public final class UsbfsTransport: MTPTransport, USBEndpointDescribing, @uncheck
 
     /// Opens the interface. Retries a busy (claimed elsewhere) interface after
     /// each delay in `retryDelays`, never resetting. A final busy failure
-    /// names the process holding the phone when it is visible.
+    /// names the process holding the phone when it is visible. A node this
+    /// user may not open yet is retried after each of `permissionRetryDelays`:
+    /// a hotplug attach can race the udev rule that grants the login session
+    /// access (it cannot when the event comes from udev after its rules, but
+    /// it can from the kernel's own group, or from a sysfs scan of a device
+    /// that is still being set up).
     public static func open(_ candidate: MTPInterfaceCandidate,
                             retryDelays: [TimeInterval] = [0.25, 0.5, 1.0, 2.0],
+                            permissionRetryDelays: [TimeInterval] = UsbfsOpenRetry.permissionDelays,
                             log: ((String) -> Void)? = nil) throws -> UsbfsTransport {
-        var attempt = 0
-        while true {
-            do {
-                return try UsbfsTransport(candidate: candidate, log: log)
-            } catch let error as MTPTransportError where error.kind == .exclusiveAccess {
-                guard attempt < retryDelays.count else { throw error }
-                log?("open attempt \(attempt + 1) failed: \(error); retrying in \(retryDelays[attempt]) s (no reset)")
-                Thread.sleep(forTimeInterval: retryDelays[attempt])
-                attempt += 1
-            }
+        try UsbfsOpenRetry.run(busyDelays: retryDelays, permissionDelays: permissionRetryDelays,
+                               sleep: { Thread.sleep(forTimeInterval: $0) }, log: log) {
+            try UsbfsTransport(candidate: candidate, log: log)
         }
     }
 

@@ -69,7 +69,10 @@ struct Scenarios {
             return !harness.isConnected
         }
         let adb = await trigger.value
-        result.note("adb svc usb resetUsbGadget: status=\(adb.status)\(adb.timedOut ? " (timed out: adb dropped)" : "")")
+        result.note("adb svc usb resetUsbGadget: status=\(adb.reset.status)\(adb.reset.timedOut ? " (timed out: adb dropped)" : "")")
+        if let reselected = adb.mtpReselectedAt {
+            result.note("the phone came back without mtp (locked); mtp selected again at +\(fmt(reselected - t0))s")
+        }
         result.check(noticed, "loss noticed without any user action after \(fmt(tLoss - t0))s")
         if !noticed {
             return result
@@ -80,7 +83,8 @@ struct Scenarios {
             return harness.isConnected && harness.deviceModelReady
         }
         let tBack = elapsed()
-        result.check(back, "reconnected on its own \(fmt(tBack - t0))s after the trigger (\(fmt(tBack - tLoss))s after the loss)")
+        result.check(back, "reconnected on its own \(fmt(tBack - t0))s after the trigger (\(fmt(tBack - tLoss))s after the loss"
+                     + (adb.mtpReselectedAt.map { ", \(fmt(tBack - $0))s after mtp was selected again" } ?? "") + ")")
         guard back, let restored = controller.deviceModel else { return result }
         result.check(harness.connectedSerial == serial, "same serial: \(harness.connectedSerial ?? "?")")
         result.check(restored.currentLocation == location, "folder restored: \(restored.currentLocation)")
@@ -223,7 +227,7 @@ struct Scenarios {
         let timeline = harness.timeline.filter { $0.time >= t0 }.map { "+\(fmt($0.time - t0))s \($0.text)" }
         let attempts = harness.factoryCallTimes.dropFirst(factoryBefore).map { fmt($0 - t0) }
         result.note("timeline: \(timeline.joined(separator: " | "))")
-        result.note("provider opens: \(attempts.isEmpty ? "none" : "+" + attempts.joined(separator: ", +"))s")
+        result.note("provider opens: \(attempts.isEmpty ? "none" : "+" + attempts.joined(separator: ", +") + "s")")
         if case .noDevice = controller.state {
             result.check(!controller.isReconnecting, "settled on no device, not reconnecting, after 25 s: \(settled)")
         } else {
@@ -351,7 +355,11 @@ struct Scenarios {
             }
 
             let unpacked = try freshDirectory(context.work.appending(path: "bugreport-unzipped"))
+            #if os(macOS)
             let unzip = await runCommand("/usr/bin/ditto", ["-x", "-k", zip.path, unpacked.path])
+            #else
+            let unzip = await runCommand("/usr/bin/unzip", ["-q", zip.path, "-d", unpacked.path])
+            #endif
             result.check(unzip.status == 0, "zip unpacks (\(unzip.output))")
             let folder = unpacked.appending(path: BugReportGenerator.folderName)
             let files = directoryContents(folder)

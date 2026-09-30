@@ -8,7 +8,10 @@
 //
 //   LifecycleProbe [--scenarios 1,2,3,5,6,4] [--size-mb 300] [--work DIR]
 //
-// adb triggers the USB events. Everything written on the phone lives in
+// adb triggers the USB events (found in Homebrew's prefixes or on PATH, or
+// set ADB; with several devices attached, set ANDROID_SERIAL). A locked
+// phone comes back from a gadget reset without MTP; the probe then selects
+// mtp again and reports the reconnect from that point too. Everything written on the phone lives in
 // /Download/ART-Lifecycle-Probe/. The last line is "VERIFICATION ok" only when
 // every attempted scenario passed; otherwise "VERIFICATION failed: …" and
 // exit status 1. The phone is left in File transfer (mtp).

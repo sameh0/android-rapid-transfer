@@ -116,6 +116,7 @@ public enum BugReportEnvironment {
         text += "Mac model: \(hardwareModel() ?? "unknown")\n"
         #else
         text += "OS: \(processInfo.operatingSystemVersionString)\n"
+        if let kernel = kernelRelease() { text += "Kernel: \(kernel)\n" }
         text += "Model: \(hardwareModel() ?? "unknown")\n"
         #endif
         text += "Architecture: \(architecture)\n"
@@ -135,6 +136,13 @@ public enum BugReportEnvironment {
             return value.isEmpty ? nil : value
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    /// The running kernel (`uname -r`); USB behaviour depends on it.
+    private static func kernelRelease() -> String? {
+        guard let raw = try? String(contentsOfFile: "/proc/sys/kernel/osrelease", encoding: .utf8) else { return nil }
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
     #else
     private static func hardwareModel() -> String? {

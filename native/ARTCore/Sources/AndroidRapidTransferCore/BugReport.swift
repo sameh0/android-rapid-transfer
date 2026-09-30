@@ -99,6 +99,12 @@ public final class BugReportGenerator {
     nonisolated public static let folderName = "Android-Rapid-Transfer-Bug-Report"
     nonisolated public static let defaultFileName = "Android-Rapid-Transfer-Bug-Report.zip"
 
+    #if os(macOS)
+    nonisolated static let environmentDescription = "\(AppIdentity.name) version, macOS version and Mac model"
+    #else
+    nonisolated static let environmentDescription = "\(AppIdentity.name) version, operating system, kernel and computer model"
+    #endif
+
     /// The single source of truth for what the bundle contains; the sheet shows
     /// this list before anything is collected. `diagnostic` is the device
     /// diagnostic's file.
@@ -106,7 +112,7 @@ public final class BugReportGenerator {
         [
             BugReportItem(
                 fileName: "environment.txt",
-                description: "\(AppIdentity.name) version, macOS version and Mac model"
+                description: environmentDescription
             ),
             BugReportItem(
                 fileName: "device.txt",

@@ -88,6 +88,13 @@ func runCommand(
 
 // MARK: - adb
 
+struct Reenumeration: Sendable {
+    let reset: CommandResult
+    /// Probe time at which mtp was selected again after the phone came back
+    /// without it; nil when the phone kept mtp.
+    let mtpReselectedAt: Double?
+}
+
 enum ADB {
     static let executable: String = {
         if let path = ProcessInfo.processInfo.environment["ADB"], !path.isEmpty { return path }
@@ -95,7 +102,14 @@ enum ADB {
         where FileManager.default.isExecutableFile(atPath: candidate) {
             return candidate
         }
-        return "adb"
+        // Process does not search PATH: find adb there (on Linux it is
+        // usually a user install, for example ~/.local/bin).
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        for directory in path.split(separator: ":") {
+            let candidate = "\(directory)/adb"
+            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
+        }
+        return "/usr/bin/adb"
     }()
 
     static func run(_ arguments: [String], timeout: TimeInterval = 20) async -> CommandResult {
@@ -117,8 +131,29 @@ enum ADB {
     /// Re-enumerates the phone with its functions unchanged: on this phone
     /// (HyperOS) `setFunctions mtp` while already in mtp is a no-op, so the
     /// gadget is reset instead. adb drops with it, so the call may time out.
-    static func reenumerate() async -> CommandResult {
-        await run(["shell", "svc usb resetUsbGadget"], timeout: 5)
+    ///
+    /// A locked phone comes back from the reset without MTP (charging and
+    /// adb only), since Android applies File transfer only while unlocked;
+    /// then mtp is selected again (a second re-enumeration), as the user
+    /// would by unlocking and picking File transfer.
+    static func reenumerate() async -> Reenumeration {
+        let reset = await run(["shell", "svc usb resetUsbGadget"], timeout: 5)
+        guard await waitReachable(timeout: 15) else {
+            return Reenumeration(reset: reset, mtpReselectedAt: nil)
+        }
+        // Read twice: right after adb returns the functions may still settle.
+        var functions = await functions()
+        if !functions.contains("mtp") {
+            try? await Task.sleep(for: .milliseconds(500))
+            functions = await self.functions()
+        }
+        guard !functions.contains("mtp") else {
+            return Reenumeration(reset: reset, mtpReselectedAt: nil)
+        }
+        let at = elapsed()
+        log("the phone came back from the gadget reset without mtp (\(functions.isEmpty ? "none" : functions); locked?): selecting mtp again")
+        _ = await setFunctions("mtp")
+        return Reenumeration(reset: reset, mtpReselectedAt: at)
     }
 
     /// A harmless round trip that proves adb is reachable.

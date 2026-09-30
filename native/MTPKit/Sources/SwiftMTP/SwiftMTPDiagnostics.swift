@@ -67,7 +67,7 @@ public enum SwiftMTPDiagnostics {
         /// Without GetObjectPropList, folders are counted from this many
         /// GetObjectInfo calls per storage root.
         public var objectInfoSampleLimit = 64
-        /// Every USB interface in the I/O Registry (reads properties only).
+        /// Every USB interface (I/O Registry or sysfs; reads properties only).
         public var discover: @Sendable () -> [MTPInterfaceCandidate] = { USBDeviceDiscovery.allInterfaces() }
         /// Claims the chosen interface; the closure receives a log sink.
         public var open: @Sendable (MTPInterfaceCandidate, @escaping (String) -> Void) throws -> MTPTransport = {
@@ -85,6 +85,14 @@ public enum SwiftMTPDiagnostics {
         let reason: String
     }
 
+    #if os(Linux)
+    static let usbBackendName = "Linux usbfs"
+    static let interfaceSourceName = "sysfs"
+    #else
+    static let usbBackendName = "IOUSBHost"
+    static let interfaceSourceName = "the I/O Registry"
+    #endif
+
     /// Final line of a run that completed; tooling can look for it.
     public static let completionMarker = "DIAGNOSTIC complete"
 
@@ -94,7 +102,7 @@ public enum SwiftMTPDiagnostics {
     ) -> SwiftMTPDiagnosticReport {
         let report = ReportWriter(clock: options.clock)
         let started = options.clock()
-        report.line("MTP diagnostic (SwiftMTP over IOUSBHost)")
+        report.line("MTP diagnostic (SwiftMTP over \(Self.usbBackendName))")
         report.line("Started: \(options.date().formatted(.iso8601))")
         report.line("Read-only: opens the phone once, never writes to it and never resets it.")
         report.line("")
@@ -154,7 +162,7 @@ public enum SwiftMTPDiagnostics {
         report.section("USB interfaces")
         var all: [MTPInterfaceCandidate] = []
         let discoverMs = report.time { all = options.discover() }
-        report.line(String(format: "Interfaces in the I/O Registry: %d (%.1f ms)", all.count, discoverMs))
+        report.line("Interfaces in \(Self.interfaceSourceName): " + String(format: "%d (%.1f ms)", all.count, discoverMs))
         let relevant = all.filter(isPossiblyMTP)
         report.line("Still-image, vendor-specific or MTP/PTP-named interfaces: \(relevant.count)")
         for candidate in relevant {

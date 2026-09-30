@@ -160,6 +160,47 @@ final class LinuxUSBTests: XCTestCase {
 
     // MARK: - errno mapping
 
+    // MARK: - Open retries
+
+    private func runOpen(failures: [MTPTransportError.Kind], busy: [TimeInterval] = [0.25, 0.5],
+                         permission: [TimeInterval] = UsbfsOpenRetry.permissionDelays) -> (Result<Int, Error>, [TimeInterval]) {
+        var remaining = failures
+        var slept: [TimeInterval] = []
+        var calls = 0
+        let result = Result {
+            try UsbfsOpenRetry.run(busyDelays: busy, permissionDelays: permission, sleep: { slept.append($0) }, log: nil) { () -> Int in
+                calls += 1
+                if !remaining.isEmpty { throw MTPTransportError(remaining.removeFirst(), "attempt \(calls)") }
+                return calls
+            }
+        }
+        return (result, slept)
+    }
+
+    func testOpenRetriesPermissionBrieflyThenSucceeds() throws {
+        let (result, slept) = runOpen(failures: [.notPermitted, .notPermitted])
+        XCTAssertEqual(try result.get(), 3)
+        XCTAssertEqual(slept, [0.1, 0.25])
+    }
+
+    func testOpenGivesUpOnPermissionAfterItsDelays() {
+        let (result, slept) = runOpen(failures: [.notPermitted, .notPermitted, .notPermitted, .notPermitted])
+        if case let .failure(error as MTPTransportError) = result { XCTAssertEqual(error.kind, .notPermitted) } else { XCTFail("\(result)") }
+        XCTAssertEqual(slept, UsbfsOpenRetry.permissionDelays)
+    }
+
+    func testOpenRetriesBusyAndPermissionIndependently() throws {
+        let (result, slept) = runOpen(failures: [.notPermitted, .exclusiveAccess, .exclusiveAccess])
+        XCTAssertEqual(try result.get(), 4)
+        XCTAssertEqual(slept, [0.1, 0.25, 0.5])
+    }
+
+    func testOpenDoesNotRetryOtherErrors() {
+        let (result, slept) = runOpen(failures: [.noDevice])
+        if case let .failure(error as MTPTransportError) = result { XCTAssertEqual(error.kind, .noDevice) } else { XCTFail("\(result)") }
+        XCTAssertEqual(slept, [])
+    }
+
     func testErrnoMapping() {
         XCTAssertEqual(UsbfsErrno.kind(ENODEV), .noDevice)
         XCTAssertEqual(UsbfsErrno.kind(ESHUTDOWN), .noDevice)
