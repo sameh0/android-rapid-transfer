@@ -19,13 +19,22 @@ public enum PlatformUSB {
                             log: ((String) -> Void)? = nil) throws -> MTPTransport & USBEndpointDescribing {
         #if os(macOS)
         return try IOUSBHostTransport.open(candidate, log: log)
+        #elseif os(Linux)
+        return try UsbfsTransport.open(candidate, log: log)
         #else
         throw MTPCallError(message: "USB transport not available on this platform", type: .mtpDetectFailed)
         #endif
     }
 }
 
-#if !os(macOS)
+#if os(Linux)
+public enum USBDeviceDiscovery {
+    /// Every USB interface sysfs describes (none is opened).
+    public static func allInterfaces() -> [MTPInterfaceCandidate] {
+        SysfsUSBDiscovery.allInterfaces()
+    }
+}
+#elseif !os(macOS)
 public enum USBDeviceDiscovery {
     public static func allInterfaces() -> [MTPInterfaceCandidate] { [] }
 }

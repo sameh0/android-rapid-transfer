@@ -3,7 +3,8 @@
 //
 // Everything it writes lives in /Download/ART-Phase7-Probe/ on the phone,
 // which it deletes first if present and deletes again at the end. The last
-// line is "VERIFICATION ok" only when every step passed; otherwise
+// line is "VERIFICATION ok" only when every step passed (including a download
+// and an upload cancelled mid-file); otherwise
 // "VERIFICATION failed: <reason>" and exit status 1.
 
 #if canImport(CryptoKit)
@@ -113,6 +114,36 @@ func perform(_ start: () async throws -> TransferOperation) async throws -> Tran
     stats.seconds = now() - begin
     try check(ok, "transfer result was false")
     return stats
+}
+
+/// Starts a transfer, cancels it once 20 MB have moved, and requires it to
+/// end with an error. Returns the bytes moved at cancel time and how long
+/// the transfer took to settle after the cancel.
+func abortMidFile(label: String, _ start: () async throws -> TransferOperation) async throws -> (at: Int64, settle: Double) {
+    let operation = try await start()
+    var cancelledAt: Int64?
+    var cancelTime = 0.0
+    for await event in operation.progress {
+        guard cancelledAt == nil, case let .progress(info) = event else { continue }
+        if info.bulkFileSize.sent >= 20_000_000, info.bulkFileSize.sent < info.bulkFileSize.total {
+            cancelledAt = info.bulkFileSize.sent
+            cancelTime = now()
+            operation.result.cancel()
+        }
+    }
+    guard let cancelledAt else {
+        _ = try? await operation.result.value
+        throw ProbeFailure("\(label): no progress between 20 MB and the end to cancel at")
+    }
+    do {
+        _ = try await operation.result.value
+        throw ProbeFailure("\(label): finished although it was cancelled")
+    } catch let failure as ProbeFailure {
+        throw failure
+    } catch {
+        log("\(label) cancelled at \(cancelledAt) B: \(error)")
+    }
+    return (cancelledAt, now() - cancelTime)
 }
 
 func megabytesPerSecond(_ bytes: Int, _ seconds: Double) -> String {
@@ -295,6 +326,46 @@ func run(_ provider: any MTPDeviceProvider, asciiNames: Bool) async throws {
     }
     log(String(format: "download folder many/: %.2f s, 50 files sha256 ok", manyDownload.seconds))
     log("THROUGHPUT download 200 MB: " + megabytesPerSecond(big.size, bigDownloadSeconds))
+
+    // 9b. Abort a download and an upload mid-file; the session must survive
+    // and neither side may keep a partial file.
+    let abortDown = workspace.appendingPathComponent("abort-down")
+    try FileManager.default.createDirectory(at: abortDown, withIntermediateDirectories: true)
+    guard let bigEntry = listing.first(where: { $0.name == big.url.lastPathComponent }) else {
+        throw ProbeFailure("big file missing before the abort test")
+    }
+    let downAbort = try await abortMidFile(label: "download") {
+        try await provider.downloadFiles(input: DownloadFilesInput(
+            storageId: storage, sources: [bigEntry.path],
+            sourceProps: [SourceProp(fullPath: bigEntry.path, objectId: bigEntry.objectId)],
+            destination: abortDown.path, preprocessFiles: true))
+    }
+    let leftovers = try FileManager.default.contentsOfDirectory(atPath: abortDown.path)
+    try check(leftovers.isEmpty, "aborted download left local files: \(leftovers)")
+    let abortName = "abort-up-200MB.bin"
+    let abortSource = upDir.appendingPathComponent(abortName)
+    try FileManager.default.linkItem(at: big.url, to: abortSource)
+    let upAbort = try await abortMidFile(label: "upload") {
+        try await provider.uploadFiles(input: UploadFilesInput(storageId: storage, sources: [abortSource.path],
+                                                               destination: sandbox, preprocessFiles: true))
+    }
+    let afterAbort = try await walk(sandbox)
+    try check(!afterAbort.contains { $0.name == abortName }, "aborted upload left \(abortName) on the phone")
+    try check(Set(afterAbort.map(\.name)) == Set(listing.map(\.name)), "listing changed after the aborts")
+    let checkDir = workspace.appendingPathComponent("after-abort")
+    guard let small = afterAbort.first(where: { $0.name == "renamed-512x2000.bin" }) else {
+        throw ProbeFailure("renamed file missing after the aborts")
+    }
+    _ = try await perform {
+        try await provider.downloadFiles(input: DownloadFilesInput(
+            storageId: storage, sources: [small.path],
+            sourceProps: [SourceProp(fullPath: small.path, objectId: small.objectId)],
+            destination: checkDir.path, preprocessFiles: false))
+    }
+    try check(try sha256(of: checkDir.appendingPathComponent(small.name)) == aligned.sha256,
+              "download after the aborts: SHA-256 mismatch")
+    log(String(format: "ABORT download at %.0f MB settled in %.2f s; upload at %.0f MB settled in %.2f s; session usable, no partial files",
+               Double(downAbort.at) / 1e6, downAbort.settle, Double(upAbort.at) / 1e6, upAbort.settle))
 
     // 10. Upload over an existing name (replace), then verify by download.
     let replaceDir = workspace.appendingPathComponent("replace")

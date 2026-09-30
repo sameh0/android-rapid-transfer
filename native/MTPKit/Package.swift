@@ -21,16 +21,19 @@ let package = Package(
     ],
     targets: [
         .target(name: "MTPKit"),
+        // usbfs ioctl and netlink wrappers for the Linux backend (empty elsewhere).
+        .target(name: "CUsbfs"),
         .target(
             name: "USBWatcher",
+            dependencies: [.target(name: "CUsbfs", condition: .when(platforms: [.linux]))],
             linkerSettings: [.linkedFramework("IOKit", .when(platforms: [.macOS]))]
         ),
         .executableTarget(name: "usb-watch", dependencies: ["USBWatcher"]),
-        // Pure-Swift PTP/MTP stack over IOUSBHost. SwiftMTPProvider implements
+        // Pure-Swift PTP/MTP stack over IOUSBHost (macOS) or usbfs (Linux). SwiftMTPProvider implements
         // MTPKit's MTPDeviceProvider on top of it.
         .target(
             name: "SwiftMTP",
-            dependencies: ["MTPKit"],
+            dependencies: ["MTPKit", .target(name: "CUsbfs", condition: .when(platforms: [.linux]))],
             linkerSettings: [
                 .linkedFramework("IOUSBHost", .when(platforms: [.macOS])),
                 .linkedFramework("IOKit", .when(platforms: [.macOS]))

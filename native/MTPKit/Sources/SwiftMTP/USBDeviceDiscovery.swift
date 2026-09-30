@@ -3,9 +3,13 @@ import Foundation
 import IOKit
 #endif
 
-/// An MTP-looking USB interface found in the I/O Registry. Discovery reads
-/// registry properties only; it opens nothing.
+/// An MTP-looking USB interface found by the platform's discovery (the I/O
+/// Registry on macOS, sysfs on Linux). Discovery reads metadata only; it
+/// opens nothing.
 public struct MTPInterfaceCandidate: Equatable, Sendable, CustomStringConvertible {
+    /// Identity of the interface while it stays enumerated: the IORegistry
+    /// entry ID on macOS; on Linux bus, device address and interface number
+    /// packed together (`LinuxUSBAddress.interfaceID`).
     public let registryEntryID: UInt64
     public let vendorID: Int
     public let productID: Int
@@ -21,13 +25,24 @@ public struct MTPInterfaceCandidate: Equatable, Sendable, CustomStringConvertibl
     public let endpointCount: Int
     /// bcdDevice of the owning USB device (Go's `UsbDeviceInfo.Device`).
     public let deviceRelease: Int
+    /// Platform address of the interface where there is one: the sysfs
+    /// interface name on Linux (for example `3-2:1.0`); nil on macOS.
+    public let platformPath: String?
+    /// USB bus number and device address (Linux `busnum`/`devnum`, which name
+    /// the usbfs node `/dev/bus/usb/BBB/DDD`); nil on macOS.
+    public let busNumber: Int?
+    public let deviceAddress: Int?
 
     public init(registryEntryID: UInt64, vendorID: Int, productID: Int, manufacturer: String?,
                 productName: String?, serialNumber: String?, locationID: UInt32?,
                 interfaceNumber: Int, interfaceClass: Int, interfaceSubClass: Int,
                 interfaceProtocol: Int, interfaceName: String?, endpointCount: Int,
-                deviceRelease: Int = 0) {
+                deviceRelease: Int = 0, platformPath: String? = nil,
+                busNumber: Int? = nil, deviceAddress: Int? = nil) {
         self.deviceRelease = deviceRelease
+        self.platformPath = platformPath
+        self.busNumber = busNumber
+        self.deviceAddress = deviceAddress
         self.registryEntryID = registryEntryID
         self.vendorID = vendorID
         self.productID = productID

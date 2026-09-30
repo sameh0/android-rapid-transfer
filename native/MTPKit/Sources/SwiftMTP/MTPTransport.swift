@@ -20,7 +20,8 @@ public struct MTPTransportError: Error, Equatable, CustomStringConvertible, Send
     }
 
     public let kind: Kind
-    /// The IOReturn (or other OS status) behind the failure, when there is one.
+    /// The OS status behind the failure, when there is one: an IOReturn on
+    /// macOS, an errno value on Linux.
     public let status: Int32?
     public let message: String
 
@@ -32,7 +33,11 @@ public struct MTPTransportError: Error, Equatable, CustomStringConvertible, Send
 
     public var description: String {
         if let status {
+            #if os(macOS)
             return "\(message) (\(kind), IOReturn 0x\(String(UInt32(bitPattern: status), radix: 16)))"
+            #else
+            return "\(message) (\(kind), errno \(status))"
+            #endif
         }
         return "\(message) (\(kind))"
     }
