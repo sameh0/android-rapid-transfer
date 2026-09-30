@@ -1,0 +1,51 @@
+# Flatpak manifest. Not built by CI yet; see PACKAGING.md ("Flatpak") for how
+# to build it and for what still stands between it and Flathub.
+#
+#   flatpak-builder --user --install --force-clean build-dir \
+#       native/AndroidRapidTransferLinux/packaging/com.sameh.AndroidRapidTransfer.yml
+#
+# GNOME 50 has GTK 4.22 and libadwaita 1.9, which the app needs to build.
+id: com.sameh.AndroidRapidTransfer
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.swift6
+command: android-rapid-transfer
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # USB access to the phone. `--device=usb` (with the USB portal) is the narrow
+  # choice, but Flathub reviewers currently ask for --device=all instead.
+  - --device=all
+  # Files are opened and saved through the file chooser and drag-and-drop
+  # portals, so no --filesystem access is requested.
+
+build-options:
+  append-path: /usr/lib/sdk/swift6/bin
+  prepend-ld-library-path: /usr/lib/sdk/swift6/lib
+
+modules:
+  - name: android-rapid-transfer
+    buildsystem: simple
+    build-commands:
+      # Builds with the Swift runtime linked statically (the GNOME runtime has
+      # no Swift libraries) and stages the usual tree; the udev rule is left
+      # out, since a Flatpak cannot install one.
+      - native/AndroidRapidTransferLinux/Scripts/linux-build.sh --stage "$PWD/flatpak-stage"
+      - cp -a flatpak-stage/usr/bin flatpak-stage/usr/share "${FLATPAK_DEST}/"
+    sources:
+      # The repository checkout this manifest lives in. SwiftPM needs its
+      # package dependencies available offline (flatpak-builder has no network
+      # during the build); see PACKAGING.md.
+      - type: dir
+        path: ../../..
+        skip:
+          - .build
+          - native/AndroidRapidTransferLinux/.build
+          - native/AndroidRapidTransferLinux/dist
+          - native/ARTCore/.build
+          - native/MTPKit/.build

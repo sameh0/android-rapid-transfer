@@ -9,6 +9,11 @@
 # Everything is done by native/AndroidRapidTransfer/Scripts/ci-build.sh
 # (`package`, then `appcast`), which runs the same way on a Mac.
 #
+# The linux-package job builds the Linux artifacts (tarball, AppImage, .deb,
+# .rpm; x86_64 and aarch64) with
+# native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh package and, for a
+# tag, linux-draft-release adds them to the same draft release. No secrets.
+#
 # Secrets, all optional; without them the DMG is ad-hoc signed and every
 # signing, notarization and appcast step says what it skipped and why. The
 # checklist is in native/AndroidRapidTransfer/DISTRIBUTION.md:
@@ -216,3 +221,134 @@ jobs:
               "${prerelease_flag[@]}"
           fi
           echo "Draft release $TAG is ready for review; publish it by hand."
+
+  # The Linux artifacts (tarball, AppImage with its .zsync, .deb, .rpm) for
+  # x86_64 and aarch64, built in Ubuntu 26.04 by
+  # native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh package, which
+  # runs the same way on a Linux machine. See
+  # native/AndroidRapidTransferLinux/PACKAGING.md.
+  linux-package:
+    name: Package Linux (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:26.04
+    timeout-minutes: 60
+    env:
+      # Relative to the workspace: in a container job, github.workspace names
+      # the host's path, not the container's.
+      ART_CI_OUTPUT_DIR: ci-output
+    steps:
+      # Before checkout, so that it makes a git repository rather than
+      # downloading a tarball.
+      - name: Install git
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ca-certificates git
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Swift, GTK and libadwaita
+        run: native/AndroidRapidTransferLinux/Scripts/linux-ci-setup.sh
+
+      - name: Package
+        id: package
+        env:
+          ART_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh package
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.package.outputs.artifact-name }}
+          path: |
+            ${{ env.ART_CI_OUTPUT_DIR }}/*.tar.gz
+            ${{ env.ART_CI_OUTPUT_DIR }}/*.AppImage
+            ${{ env.ART_CI_OUTPUT_DIR }}/*.AppImage.zsync
+            ${{ env.ART_CI_OUTPUT_DIR }}/*.deb
+            ${{ env.ART_CI_OUTPUT_DIR }}/*.rpm
+            ${{ env.ART_CI_OUTPUT_DIR }}/SHA256SUMS-linux-*
+            ${{ env.ART_CI_OUTPUT_DIR }}/build-info-linux-*.txt
+          if-no-files-found: error
+          retention-days: ${{ github.ref_type == 'tag' && 90 || 14 }}
+          # Every file is already compressed.
+          compression-level: 0
+
+      - name: Upload packaging logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-package-logs-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ART_CI_OUTPUT_DIR }}/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Adds the Linux artifacts to the draft release the macOS job created.
+  linux-draft-release:
+    name: Add Linux packages to the draft release
+    needs: [draft-release, linux-package]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download Linux packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: '*-linux-*'
+          merge-multiple: true
+          path: dist
+
+      - name: Add them to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd dist
+          for sums in SHA256SUMS-linux-*; do sha256sum -c "$sums"; done
+          ls -l
+
+          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != true ]]; then
+            echo "::error::Release $TAG is not a draft; refusing to change it."
+            exit 1
+          fi
+
+          gtk='?' adwaita='?' glibc='?'
+          while IFS='=' read -r key value; do
+            case "$key" in
+              MINIMUM_GTK) gtk=$value ;;
+              MINIMUM_LIBADWAITA) adwaita=$value ;;
+              MINIMUM_GLIBC) glibc=$value ;;
+            esac
+          done < <(cat build-info-linux-*.txt)
+
+          # Append a Linux section to the notes (replacing an earlier one).
+          gh release view "$TAG" --json body --jq .body > notes.md
+          sed -i '/^<!-- linux -->$/,$d' notes.md
+          {
+            echo "<!-- linux -->"
+            echo "### Linux"
+            echo
+            echo "AppImage, tarball, .deb and .rpm for x86_64 and aarch64. They need GTK $gtk,"
+            echo "libadwaita $adwaita and glibc $glibc or later (Ubuntu 26.04, Fedora 44 or newer)."
+            echo
+            echo '```'
+            cat SHA256SUMS-linux-*
+            echo '```'
+          } >> notes.md
+          gh release edit "$TAG" --notes-file notes.md
+          gh release upload "$TAG" --clobber \
+            ./*.tar.gz ./*.AppImage ./*.AppImage.zsync ./*.deb ./*.rpm ./SHA256SUMS-linux-* ./build-info-linux-*.txt
+          echo "Linux packages added to the draft release $TAG."

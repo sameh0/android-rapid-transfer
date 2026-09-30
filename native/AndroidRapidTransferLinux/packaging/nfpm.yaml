@@ -1,0 +1,75 @@
+# nfpm configuration for the .deb and .rpm (Scripts/linux-package.sh deb|rpm).
+# That script fills in the ${...} placeholders; the files
+# come from the tree Scripts/linux-build.sh staged.
+name: android-rapid-transfer
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${ART_VERSION}
+version_schema: semver
+release: ${ART_PACKAGE_RELEASE}
+section: utils
+priority: optional
+maintainer: ${ART_MAINTAINER}
+description: |-
+  Move files between an Android phone and your computer.
+  Android Rapid Transfer copies photos, videos and files between an Android
+  phone in File transfer (MTP) mode and this computer over USB, with drag and
+  drop in both directions. It talks to the phone directly: no drivers, no
+  cloud, no account.
+vendor: Sameh
+homepage: https://github.com/sameh0/android-rapid-transfer
+license: MIT
+
+contents:
+  - src: ${ART_STAGE}/usr/bin/android-rapid-transfer
+    dst: /usr/bin/android-rapid-transfer
+    file_info:
+      mode: 0755
+  - src: ${ART_STAGE}/usr/share/applications/com.sameh.AndroidRapidTransfer.desktop
+    dst: /usr/share/applications/com.sameh.AndroidRapidTransfer.desktop
+  - src: ${ART_STAGE}/usr/share/metainfo/com.sameh.AndroidRapidTransfer.metainfo.xml
+    dst: /usr/share/metainfo/com.sameh.AndroidRapidTransfer.metainfo.xml
+  - src: ${ART_STAGE}/usr/share/icons/hicolor
+    dst: /usr/share/icons/hicolor
+    type: tree
+  - src: ${ART_STAGE}/usr/lib/udev/rules.d/70-android-rapid-transfer.rules
+    dst: /usr/lib/udev/rules.d/70-android-rapid-transfer.rules
+  - src: ${ART_STAGE}/usr/share/doc/android-rapid-transfer/README
+    dst: /usr/share/doc/android-rapid-transfer/README
+  - src: ${ART_STAGE}/usr/share/doc/android-rapid-transfer/LICENSE
+    dst: /usr/share/doc/android-rapid-transfer/copyright
+    packager: deb
+  - src: ${ART_STAGE}/usr/share/doc/android-rapid-transfer/LICENSE
+    dst: /usr/share/licenses/android-rapid-transfer/LICENSE
+    packager: rpm
+    type: license
+
+# The desktop database and icon cache are refreshed by the distributions' own
+# file triggers; only udev needs telling about the new rule.
+scripts:
+  postinstall: ${ART_PACKAGING}/linux-udev-reload.sh
+  postremove: ${ART_PACKAGING}/linux-udev-reload.sh
+
+overrides:
+  deb:
+    depends:
+      - libc6 (>= ${ART_GLIBC_MIN})
+      - libstdc++6
+      - libgcc-s1
+      - libgtk-4-1 (>= ${ART_MIN_GTK})
+      - libadwaita-1-0 (>= ${ART_MIN_ADWAITA})
+    recommends:
+      - adwaita-icon-theme
+  rpm:
+    depends:
+      - glibc >= ${ART_GLIBC_MIN}
+      - libstdc++
+      - gtk4 >= ${ART_MIN_GTK}
+      - libadwaita >= ${ART_MIN_ADWAITA}
+
+deb:
+  fields:
+    Bugs: https://github.com/sameh0/android-rapid-transfer/issues
+rpm:
+  group: Applications/System
+  summary: Move files between an Android phone and your computer

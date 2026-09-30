@@ -1,7 +1,8 @@
 # Builds and tests the Swift packages on every push to main and
 # on every pull request. The work is done by
 # native/AndroidRapidTransfer/Scripts/ci-build.sh, which runs the same way on
-# a Mac: `Scripts/ci-build.sh test`.
+# a Mac: `Scripts/ci-build.sh test`. The `linux` job builds and tests the
+# Linux packages with native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh.
 #
 # Toolchain, as repository variables (Settings > Secrets and variables >
 # Actions > Variables), both optional:
@@ -68,6 +69,67 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.ART_CI_OUTPUT_DIR }}/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The Linux packages (MTPKit, ARTCore and the GTK app) on Ubuntu 26.04, the
+  # oldest Ubuntu with the GTK and libadwaita the app needs; the Swift toolchain
+  # comes from Scripts/linux-ci-setup.sh. The work is done by
+  # native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh, which runs the
+  # same way on a Linux machine: `Scripts/ci-build-linux.sh test`.
+  linux:
+    name: Linux build and test (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:26.04
+    timeout-minutes: 60
+    env:
+      # Relative to the workspace: in a container job, github.workspace names
+      # the host's path, not the container's.
+      ART_CI_OUTPUT_DIR: ci-output
+    steps:
+      # Before checkout, so that it makes a git repository rather than
+      # downloading a tarball.
+      - name: Install git
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ca-certificates git
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Swift, GTK and libadwaita
+        run: native/AndroidRapidTransferLinux/Scripts/linux-ci-setup.sh
+
+      - name: Cache SwiftPM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            native/AndroidRapidTransferLinux/.build
+            native/ARTCore/.build
+            native/MTPKit/.build
+          key: spm-linux-test-${{ matrix.arch }}-ubuntu2604-swift-6.3.3-${{ hashFiles('native/*/Package.resolved', 'native/*/Package.swift') }}
+          restore-keys: |
+            spm-linux-test-${{ matrix.arch }}-ubuntu2604-swift-6.3.3-
+
+      - name: Build and test
+        run: native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh test
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-test-logs-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.ART_CI_OUTPUT_DIR }}/logs
           if-no-files-found: ignore
           retention-days: 14

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Android Rapid Transfer
+GenericName=Phone File Transfer
+Comment=Copy photos, videos and files between an Android phone and this computer over USB
+Icon=com.sameh.AndroidRapidTransfer
+Exec=android-rapid-transfer
+TryExec=android-rapid-transfer
+Terminal=false
+Categories=Utility;FileTransfer;GTK;
+Keywords=Android;phone;MTP;USB;transfer;photos;files;copy;camera;
+StartupNotify=true
+StartupWMClass=com.sameh.AndroidRapidTransfer
+SingleMainWindow=true

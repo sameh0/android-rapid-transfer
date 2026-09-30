@@ -1,0 +1,30 @@
+# Android Rapid Transfer: lets the user at the local seat open Android phones in
+# File transfer (MTP) mode, via systemd-logind's "uaccess" ACL.
+#
+# OPTIONAL on systemd desktops: systemd's own 70-uaccess.rules already tags
+# phones whose MTP interface uses the standard still-image class (06/01/01),
+# which is nearly every Android phone from the last decade. This rule adds:
+#   - phones that expose MTP on a vendor-specific interface (class ff, subclass
+#     ff, protocol 00), as older Android phones do;
+#   - devices another rule already identified as MTP (ID_MTP_DEVICE=1).
+# It changes nothing on a device that has no such interface, and gives access
+# only to whoever is logged in at the machine's seat (not to SSH sessions).
+#
+# Install to /usr/lib/udev/rules.d (packages) or /etc/udev/rules.d (by hand),
+# then: sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=usb
+# and unplug and replug the phone. The number must stay below 73, where
+# systemd turns the uaccess tag into an ACL.
+
+ACTION=="remove", GOTO="android_rapid_transfer_end"
+SUBSYSTEM!="usb", GOTO="android_rapid_transfer_end"
+ENV{DEVTYPE}!="usb_device", GOTO="android_rapid_transfer_end"
+
+# Standard MTP interface (already covered by systemd; kept for systems whose
+# udev lacks it).
+ENV{ID_USB_INTERFACES}=="*:060101:*", TAG+="uaccess"
+# Vendor-specific MTP interface used by older Android phones.
+ENV{ID_USB_INTERFACES}=="*:ffff00:*", TAG+="uaccess"
+# Identified as an MTP device by another rule (for example libmtp's).
+ENV{ID_MTP_DEVICE}=="1", TAG+="uaccess"
+
+LABEL="android_rapid_transfer_end"

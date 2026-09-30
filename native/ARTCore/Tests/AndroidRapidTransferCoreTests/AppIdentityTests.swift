@@ -68,6 +68,50 @@ final class AppIdentityTests: XCTestCase {
         )
     }
 
+    /// The Linux packaging (native/AndroidRapidTransferLinux) names the app
+    /// and its application ID in its own config, desktop entry and AppStream
+    /// metadata; all of them must match AppIdentity.
+    func testLinuxPackagingMatchesTheIdentity() throws {
+        let linuxRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // AndroidRapidTransferCoreTests
+            .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // package root (ARTCore)
+            .deletingLastPathComponent() // native
+            .appending(path: "AndroidRapidTransferLinux")
+        let script = try String(
+            contentsOf: linuxRoot.appending(path: "Scripts/linux-release-config.sh"),
+            encoding: .utf8
+        )
+        var config: [String: String] = [:]
+        for line in script.split(separator: "\n") {
+            guard let match = line.wholeMatch(of: /([A-Z_]+)="([^"$]*)"/) else { continue }
+            config[String(match.1)] = String(match.2)
+        }
+        XCTAssertEqual(config["LINUX_APP_NAME"], AppIdentity.fallbackName)
+        XCTAssertEqual(config["LINUX_APP_ID"], AppIdentity.bundleIdentifier)
+        XCTAssertEqual(config["LINUX_HOMEPAGE"], AppIdentity.repositoryURL.absoluteString)
+
+        let id = AppIdentity.bundleIdentifier
+        let desktop = try String(
+            contentsOf: linuxRoot.appending(path: "packaging/\(id).desktop"),
+            encoding: .utf8
+        )
+        let desktopLines = Set(desktop.split(separator: "\n").map(String.init))
+        XCTAssertTrue(desktopLines.contains("Name=\(AppIdentity.fallbackName)"))
+        XCTAssertTrue(desktopLines.contains("Icon=\(id)"))
+        XCTAssertTrue(desktopLines.contains("StartupWMClass=\(id)"))
+        XCTAssertTrue(desktopLines.contains("Exec=\(try XCTUnwrap(config["LINUX_EXECUTABLE"]))"))
+
+        let metainfo = try String(
+            contentsOf: linuxRoot.appending(path: "packaging/\(id).metainfo.xml"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(metainfo.contains("<id>\(id)</id>"))
+        XCTAssertTrue(metainfo.contains("<name>\(AppIdentity.fallbackName)</name>"))
+        XCTAssertTrue(metainfo.contains("<launchable type=\"desktop-id\">\(id).desktop</launchable>"))
+        XCTAssertTrue(metainfo.contains("<url type=\"homepage\">\(AppIdentity.repositoryURL.absoluteString)</url>"))
+    }
+
     func testInfoPlistNameWinsOverTheFallback() {
         XCTAssertEqual(
             AppIdentity.name(from: ["CFBundleDisplayName": "Android Rapid Transfer"]),
