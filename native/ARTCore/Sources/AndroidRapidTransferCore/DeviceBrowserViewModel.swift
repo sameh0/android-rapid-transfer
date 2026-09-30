@@ -45,6 +45,10 @@ public final class DeviceBrowserViewModel: DeviceTransferPaneModel {
     private var currentPath = "/"
     private var history: [String] = []
     private var loadGeneration = 0
+    /// The folder load in flight, if any. A refresh that lands while it is
+    /// still walking re-reads *its* destination: walking `currentPath` instead
+    /// would supersede the navigation and silently keep the old folder.
+    @ObservationIgnored private var pendingLoad: PendingDirectoryLoad?
     private var selection = BrowserSelectionState()
     @ObservationIgnored private var filterCache = BrowserEntryFilterCache()
 
@@ -169,16 +173,11 @@ public final class DeviceBrowserViewModel: DeviceTransferPaneModel {
     }
 
     public func refresh() async {
-        guard let selectedStorageID else {
+        guard selectedStorageID != nil else {
             await load()
             return
         }
-        await loadDirectory(
-            currentPath,
-            storageID: selectedStorageID,
-            addingCurrentToHistory: false,
-            clearsSelection: false
-        )
+        await reloadLatestDestination()
     }
 
     public func navigate(to entry: BrowserEntry) async {
@@ -269,13 +268,8 @@ public final class DeviceBrowserViewModel: DeviceTransferPaneModel {
     public func setShowsHiddenFiles(_ showsHiddenFiles: Bool) async {
         guard self.showsHiddenFiles != showsHiddenFiles else { return }
         self.showsHiddenFiles = showsHiddenFiles
-        guard let selectedStorageID else { return }
-        await loadDirectory(
-            currentPath,
-            storageID: selectedStorageID,
-            addingCurrentToHistory: false,
-            clearsSelection: false
-        )
+        guard selectedStorageID != nil else { return }
+        await reloadLatestDestination()
     }
 
     public func selectEntry(id: BrowserEntry.ID, extending: Bool, toggling: Bool) {
@@ -447,6 +441,27 @@ public final class DeviceBrowserViewModel: DeviceTransferPaneModel {
         )
     }
 
+    /// Reloads the folder the pane is showing or, while a navigation (or a
+    /// storage switch) is still walking, the folder it is going to, keeping
+    /// that navigation's history and selection behaviour.
+    private func reloadLatestDestination() async {
+        if let pendingLoad {
+            await loadDirectory(
+                pendingLoad.path,
+                storageID: pendingLoad.storageID,
+                addingCurrentToHistory: pendingLoad.addingCurrentToHistory,
+                clearsSelection: pendingLoad.clearsSelection
+            )
+        } else if let selectedStorageID {
+            await loadDirectory(
+                currentPath,
+                storageID: selectedStorageID,
+                addingCurrentToHistory: false,
+                clearsSelection: false
+            )
+        }
+    }
+
     @discardableResult
     private func loadDirectory(
         _ destination: String,
@@ -456,6 +471,12 @@ public final class DeviceBrowserViewModel: DeviceTransferPaneModel {
     ) async -> DirectoryLoadResult {
         loadGeneration += 1
         let generation = loadGeneration
+        pendingLoad = PendingDirectoryLoad(
+            path: destination,
+            storageID: storageID,
+            addingCurrentToHistory: addingCurrentToHistory,
+            clearsSelection: clearsSelection
+        )
         isLoading = true
         error = nil
         defer {
@@ -463,6 +484,7 @@ public final class DeviceBrowserViewModel: DeviceTransferPaneModel {
                 isLoading = false
                 loadingProgress = nil
                 hasLoaded = true
+                pendingLoad = nil
             }
         }
 
@@ -473,6 +495,12 @@ public final class DeviceBrowserViewModel: DeviceTransferPaneModel {
                 generation: generation
             )
             guard generation == loadGeneration else { return .superseded }
+            if storageID != selectedStorageID {
+                // A storage switch (possibly carried on by a refresh that
+                // superseded it) starts that storage's history afresh.
+                selectedStorageID = storageID
+                history = []
+            }
             if addingCurrentToHistory, destination != currentPath {
                 history.append(currentPath)
             }
@@ -620,6 +648,13 @@ private struct StorageSelectionSnapshot {
     let history: [String]
     let entries: [BrowserEntry]
     let selection: BrowserSelectionState
+}
+
+private struct PendingDirectoryLoad {
+    let path: String
+    let storageID: UInt32
+    let addingCurrentToHistory: Bool
+    let clearsSelection: Bool
 }
 
 private enum DirectoryLoadResult {

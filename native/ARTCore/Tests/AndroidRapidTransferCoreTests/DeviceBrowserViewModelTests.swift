@@ -115,6 +115,52 @@ final class DeviceBrowserViewModelTests: XCTestCase {
         XCTAssertNil(model.error)
     }
 
+    /// A refresh that lands while a navigation is still walking (the transfer
+    /// panel refreshes the phone pane right after an upload finishes) walks
+    /// where the user is going, instead of the old folder.
+    func testRefreshDuringNavigationDoesNotSwallowTheNavigation() async throws {
+        let provider = GatedStorageSwitchProvider(
+            provider: DeviceFixture.makeProvider(),
+            gatedStorageID: 1,
+            gatedPath: "/DCIM"
+        )
+        let model = DeviceBrowserViewModel(provider: provider)
+        await model.load()
+        let dcim = try XCTUnwrap(model.entries.first { $0.name == "DCIM" })
+
+        let navigation = Task { await model.navigate(to: dcim) }
+        await provider.waitUntilStorageSwitchWalkStarts()
+        let refresh = Task { await model.refresh() }
+        await provider.finishStorageSwitchWalk()
+        await refresh.value
+        await navigation.value
+
+        XCTAssertEqual(model.currentLocation, "/DCIM")
+        XCTAssertEqual(model.entries.map(\.name), ["Camera"])
+        XCTAssertFalse(model.isLoading)
+        XCTAssertTrue(model.canGoBack, "the navigation keeps its history entry")
+    }
+
+    func testRefreshDuringStorageSwitchCompletesTheSwitch() async throws {
+        let provider = GatedStorageSwitchProvider(provider: DeviceFixture.makeProvider())
+        let model = DeviceBrowserViewModel(provider: provider)
+        await model.load()
+        let dcim = try XCTUnwrap(model.entries.first { $0.name == "DCIM" })
+        await model.navigate(to: dcim)
+
+        let storageSwitch = Task { await model.selectStorage(id: 2) }
+        await provider.waitUntilStorageSwitchWalkStarts()
+        let refresh = Task { await model.refresh() }
+        await provider.finishStorageSwitchWalk()
+        await refresh.value
+        await storageSwitch.value
+
+        XCTAssertEqual(model.selectedStorageID, 2)
+        XCTAssertEqual(model.currentLocation, "/")
+        XCTAssertFalse(model.canGoBack)
+        XCTAssertNil(model.error)
+    }
+
     func testHiddenFilesPassThroughMockWalkPreference() async {
         let model = DeviceBrowserViewModel(provider: DeviceFixture.makeProvider())
 
@@ -307,8 +353,15 @@ private actor GatedStorageSwitchProvider: MTPDeviceProvider {
     private var didStartStorageSwitchWalk = false
     private var storageSwitchStartWaiters: [CheckedContinuation<Void, Never>] = []
 
-    init(provider: any MTPDeviceProvider) {
+    private let gatedStorageID: UInt32
+    private let gatedPath: String
+
+    /// Holds every walk of `gatedPath` on `gatedStorageID` until
+    /// ``finishStorageSwitchWalk()``.
+    init(provider: any MTPDeviceProvider, gatedStorageID: UInt32 = 2, gatedPath: String = "/") {
         self.provider = provider
+        self.gatedStorageID = gatedStorageID
+        self.gatedPath = gatedPath
     }
 
     func waitUntilStorageSwitchWalkStarts() async {
@@ -331,7 +384,7 @@ private actor GatedStorageSwitchProvider: MTPDeviceProvider {
     }
 
     func walk(input: DirectoryWalkInput) async throws -> [WalkEntry] {
-        if input.storageId == 2, input.fullPath == "/" {
+        if input.storageId == gatedStorageID, input.fullPath == gatedPath {
             didStartStorageSwitchWalk = true
             let waiters = storageSwitchStartWaiters
             storageSwitchStartWaiters.removeAll()

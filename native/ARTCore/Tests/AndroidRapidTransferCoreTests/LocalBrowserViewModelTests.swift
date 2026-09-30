@@ -32,6 +32,51 @@ final class LocalBrowserViewModelTests: XCTestCase {
         XCTAssertEqual(model.currentLocation, fixture.root.path)
     }
 
+    /// A refresh that lands while a navigation is still reading its folder (the
+    /// transfer panel refreshes the pane right after a copy finishes) reloads
+    /// where the user is going, instead of reloading the old folder and
+    /// swallowing the navigation.
+    func testRefreshDuringNavigationDoesNotSwallowTheNavigation() async throws {
+        let fixture = try LocalFixture()
+        defer { fixture.remove() }
+        let model = LocalBrowserViewModel(rootURL: fixture.root, startURL: fixture.summer)
+        await model.load()
+        XCTAssertEqual(model.currentLocation, fixture.summer.path)
+
+        let navigation = Task {
+            await model.navigate(to: BreadcrumbSegment(id: fixture.root.path, label: "Root", location: fixture.root.path))
+        }
+        while !model.isLoading { await Task.yield() }
+        await model.refresh()
+        await navigation.value
+
+        XCTAssertEqual(model.currentLocation, fixture.root.path)
+        XCTAssertEqual(Set(model.entries.map(\.name)), ["Albums", "a-large.txt", "z-small.txt"])
+        XCTAssertFalse(model.isLoading)
+        XCTAssertTrue(model.canGoBack, "the navigation keeps its history entry")
+        await model.goBack()
+        XCTAssertEqual(model.currentLocation, fixture.summer.path)
+    }
+
+    /// Back, superseded by a refresh, still arrives, and does not put the
+    /// folder it left back on the history stack.
+    func testRefreshDuringGoBackKeepsTheBackNavigation() async throws {
+        let fixture = try LocalFixture()
+        defer { fixture.remove() }
+        let model = LocalBrowserViewModel(rootURL: fixture.root)
+        await model.load()
+        let albums = try XCTUnwrap(model.entries.first { $0.name == "Albums" })
+        await model.navigate(to: albums)
+
+        let back = Task { await model.goBack() }
+        while !model.isLoading { await Task.yield() }
+        await model.refresh()
+        await back.value
+
+        XCTAssertEqual(model.currentLocation, fixture.root.path)
+        XCTAssertFalse(model.canGoBack)
+    }
+
     func testDisplayLocationShowsTheHomeFolderAsTilde() async {
         let inHome = LocalBrowserViewModel(startURL: URL.homeDirectory.appending(path: "Pictures"))
         XCTAssertEqual(inHome.displayLocation, "~/Pictures")

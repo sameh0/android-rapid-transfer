@@ -50,6 +50,10 @@ public final class LocalBrowserViewModel: BrowserPaneModel {
     private var currentURL: URL
     private var history: [URL] = []
     private var loadGeneration = 0
+    /// The load in flight, if any. A refresh that lands while it is still
+    /// reading re-reads *its* destination: reloading `currentURL` instead
+    /// would supersede the navigation and silently keep the old folder.
+    @ObservationIgnored private var pendingLoad: PendingLoad?
     private var selection = BrowserSelectionState()
     @ObservationIgnored private var filterCache = BrowserEntryFilterCache()
 
@@ -158,7 +162,7 @@ public final class LocalBrowserViewModel: BrowserPaneModel {
     }
 
     public func refresh() async {
-        await loadDirectory(currentURL, addingCurrentToHistory: false, clearsSelection: false)
+        await reloadLatestDestination()
     }
 
     public func navigate(to entry: BrowserEntry) async {
@@ -174,15 +178,13 @@ public final class LocalBrowserViewModel: BrowserPaneModel {
     public func goBack() async {
         guard let destination = history.last else { return }
         history.removeLast()
-        let previousLocation = currentURL
-        let succeeded = await loadDirectory(
+        let result = await loadDirectory(
             destination,
             addingCurrentToHistory: false,
             clearsSelection: true
         )
-        if !succeeded {
+        if case .failed = result {
             history.append(destination)
-            currentURL = previousLocation
         }
     }
 
@@ -195,7 +197,7 @@ public final class LocalBrowserViewModel: BrowserPaneModel {
     public func setShowsHiddenFiles(_ showsHiddenFiles: Bool) async {
         guard self.showsHiddenFiles != showsHiddenFiles else { return }
         self.showsHiddenFiles = showsHiddenFiles
-        await loadDirectory(currentURL, addingCurrentToHistory: false, clearsSelection: false)
+        await reloadLatestDestination()
     }
 
     public func setDirectoriesFirst(_ directoriesFirst: Bool) {
@@ -344,20 +346,42 @@ public final class LocalBrowserViewModel: BrowserPaneModel {
         )
     }
 
+    /// Reloads the folder the pane is showing or, while a navigation is still
+    /// reading, the folder it is going to (keeping that navigation's history
+    /// and selection behaviour).
+    private func reloadLatestDestination() async {
+        let target = pendingLoad ?? PendingLoad(
+            destination: currentURL,
+            addingCurrentToHistory: false,
+            clearsSelection: false
+        )
+        await loadDirectory(
+            target.destination,
+            addingCurrentToHistory: target.addingCurrentToHistory,
+            clearsSelection: target.clearsSelection
+        )
+    }
+
     @discardableResult
     private func loadDirectory(
         _ destination: URL,
         addingCurrentToHistory: Bool,
         clearsSelection: Bool
-    ) async -> Bool {
+    ) async -> LoadResult {
         loadGeneration += 1
         let generation = loadGeneration
+        pendingLoad = PendingLoad(
+            destination: destination,
+            addingCurrentToHistory: addingCurrentToHistory,
+            clearsSelection: clearsSelection
+        )
         isLoading = true
         error = nil
         defer {
             if generation == loadGeneration {
                 isLoading = false
                 hasLoaded = true
+                pendingLoad = nil
             }
         }
 
@@ -366,7 +390,7 @@ public final class LocalBrowserViewModel: BrowserPaneModel {
                 at: destination,
                 showsHiddenFiles: showsHiddenFiles
             )
-            guard generation == loadGeneration else { return false }
+            guard generation == loadGeneration else { return .superseded }
             if addingCurrentToHistory, destination != currentURL {
                 history.append(currentURL)
             }
@@ -380,12 +404,25 @@ public final class LocalBrowserViewModel: BrowserPaneModel {
             if clearsSelection {
                 selection.clear()
             }
-            return true
+            return .loaded
         } catch {
-            guard generation == loadGeneration else { return false }
+            guard generation == loadGeneration else { return .superseded }
             self.error = BrowserPaneError(message: ErrorDescription.message(for: error))
-            return false
+            return .failed
         }
+    }
+
+    private struct PendingLoad {
+        let destination: URL
+        let addingCurrentToHistory: Bool
+        let clearsSelection: Bool
+    }
+
+    private enum LoadResult {
+        case loaded
+        case failed
+        /// A newer load took over; it owns the outcome.
+        case superseded
     }
 
     private func isWithinRoot(_ url: URL) -> Bool {
