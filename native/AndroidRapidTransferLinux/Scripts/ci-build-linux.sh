@@ -24,7 +24,7 @@
 #                          when Package.swift declares it, else the art-gtk-demo
 #                          stand-in, with a warning)
 #   ART_LINUX_SELF_TESTS   products whose `--self-test` must print
-#                          "VERIFICATION ok" (default: art-gtk-demo)
+#                          "VERIFICATION ok" (default: art-gtk-demo android-rapid-transfer)
 #   ART_LINUX_SCRATCH_ROOT build directories go in <root>/<package> instead of
 #                          each package's .build (for checkouts on slow disks)
 #   ART_RELEASE_TAG=v1.2.3 fail unless the tag is v<AppVersion.current>
@@ -38,7 +38,7 @@ REPO_ROOT=$(cd "$NATIVE_DIR/.." && pwd)
 APP_VERSION_FILE="$NATIVE_DIR/ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 OUTPUT_DIR=${ART_CI_OUTPUT_DIR:-$PROJECT_DIR/ci-artifacts}
 LOG_DIR="$OUTPUT_DIR/logs"
-SELF_TESTS=${ART_LINUX_SELF_TESTS:-art-gtk-demo}
+SELF_TESTS=${ART_LINUX_SELF_TESTS:-art-gtk-demo android-rapid-transfer}
 ARCH=$(uname -m)
 # shellcheck source=linux-release-config.sh
 source "$SCRIPT_DIR/linux-release-config.sh"
