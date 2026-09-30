@@ -25,7 +25,7 @@ CONTENTS="$APP/Contents"
 EXECUTABLE="$CONTENTS/MacOS/$APP_EXECUTABLE"
 MODULE_CACHE="$SCRIPT_DIR/.build/module-cache"
 REPO_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
-APP_VERSION_FILE="$SCRIPT_DIR/Sources/AndroidRapidTransferCore/AppVersion.swift"
+APP_VERSION_FILE="$SCRIPT_DIR/../ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 APP_VERSION=$(sed -nE 's/^[[:space:]]*public static let current = "([^"]+)"/\1/p' "$APP_VERSION_FILE")
 
 if [[ -z "$APP_VERSION" ]]; then

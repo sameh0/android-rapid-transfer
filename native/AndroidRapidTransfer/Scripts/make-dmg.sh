@@ -20,7 +20,7 @@ RELEASE_DIR="$PROJECT_DIR/release"
 # shellcheck source=release-config.sh
 source "$SCRIPT_DIR/release-config.sh"
 APP="$RELEASE_DIR/$APP_DISPLAY_NAME.app"
-APP_VERSION_FILE="$PROJECT_DIR/Sources/AndroidRapidTransferCore/AppVersion.swift"
+APP_VERSION_FILE="$PROJECT_DIR/../ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 HDIUTIL=/usr/bin/hdiutil
 
 fail() {

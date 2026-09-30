@@ -21,7 +21,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 PROJECT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 RELEASE_DIR="$PROJECT_DIR/release"
-APP_VERSION_FILE="$PROJECT_DIR/Sources/AndroidRapidTransferCore/AppVersion.swift"
+APP_VERSION_FILE="$PROJECT_DIR/../ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 WORK_DIR="$RELEASE_DIR/appcast"
 
 # shellcheck source=release-config.sh

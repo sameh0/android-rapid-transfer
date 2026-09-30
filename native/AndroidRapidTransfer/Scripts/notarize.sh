@@ -22,7 +22,7 @@ RELEASE_DIR="$PROJECT_DIR/release"
 source "$SCRIPT_DIR/release-config.sh"
 APP="$RELEASE_DIR/$APP_DISPLAY_NAME.app"
 FRAMEWORKS="$APP/Contents/Frameworks"
-APP_VERSION_FILE="$PROJECT_DIR/Sources/AndroidRapidTransferCore/AppVersion.swift"
+APP_VERSION_FILE="$PROJECT_DIR/../ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 
 [[ -d "$APP" ]] || { echo "ERROR: Missing $APP; run Scripts/package-release.sh first." >&2; exit 1; }
 # Checked before anything else, credentials included.

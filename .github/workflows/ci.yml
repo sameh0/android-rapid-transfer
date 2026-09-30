@@ -1,4 +1,4 @@
-# Builds and tests both Swift packages on every push to main and
+# Builds and tests the Swift packages on every push to main and
 # on every pull request. The work is done by
 # native/AndroidRapidTransfer/Scripts/ci-build.sh, which runs the same way on
 # a Mac: `Scripts/ci-build.sh test`.
@@ -53,6 +53,7 @@ jobs:
         with:
           path: |
             native/AndroidRapidTransfer/.build
+            native/ARTCore/.build
             native/MTPKit/.build
             ~/Library/Caches/org.swift.swiftpm
           key: spm-test-${{ runner.os }}-${{ runner.arch }}-xcode-${{ steps.xcode.outputs.build }}-${{ hashFiles('native/*/Package.resolved', 'native/*/Package.swift') }}

@@ -19,7 +19,7 @@ APP="$RELEASE_DIR/$APP_DISPLAY_NAME.app"
 CONTENTS="$APP/Contents"
 EXECUTABLE="$CONTENTS/MacOS/$APP_EXECUTABLE"
 FRAMEWORKS="$CONTENTS/Frameworks"
-APP_VERSION_FILE="$PROJECT_DIR/Sources/AndroidRapidTransferCore/AppVersion.swift"
+APP_VERSION_FILE="$PROJECT_DIR/../ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 ENTITLEMENTS="$SCRIPT_DIR/AndroidRapidTransfer.entitlements"
 MACOS_MIN_VERSION=14.0
 

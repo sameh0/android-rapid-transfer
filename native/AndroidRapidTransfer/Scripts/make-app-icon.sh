@@ -2,7 +2,7 @@
 
 # Regenerates Resources/AppIcon.icns from AppIconArtwork (the icon is drawn in
 # code, so every size comes from one source). Run it after changing
-# Sources/AndroidRapidTransferCore/AppIconArtwork.swift and commit the result;
+# native/ARTCore/Sources/AndroidRapidTransferCore/AppIconArtwork.swift and commit the result;
 # the packaging scripts copy the committed file into the bundle, and
 # AppIconArtworkTests fails while the two disagree.
 #

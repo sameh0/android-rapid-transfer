@@ -231,6 +231,7 @@ swift test
 swift run AndroidRapidTransfer          # against a connected phone
 swift run AndroidRapidTransfer --mock   # against a built-in mock phone
 
+cd ../ARTCore && swift test             # the core library and device probes
 cd ../MTPKit && swift test
 
 cd ../AndroidRapidTransfer
@@ -255,6 +256,7 @@ scratch folder so it can write its placeholder downloads there.
 ```
 AndroidRapidTransfer         SwiftUI app: windows, panes, transfer panel, onboarding
 └─ AndroidRapidTransferCore  view models, connection controller, transfer queue, settings
+   │                         (package ARTCore, no UI framework)
    └─ MTPKit                 MTPDeviceProvider protocol, models, errors, mock provider
       ├─ SwiftMTP            pure-Swift MTP/PTP engine over IOUSBHost
       └─ USBWatcher          USB hotplug detection (IOKit)
@@ -272,7 +274,8 @@ AndroidRapidTransfer         SwiftUI app: windows, panes, transfer panel, onboar
 
 | Path | What |
 |---|---|
-| `native/AndroidRapidTransfer` | the app, its core library, tests, packaging scripts, the icon generator, and device probes |
+| `native/AndroidRapidTransfer` | the macOS app, its tests, packaging scripts and the icon generator |
+| `native/ARTCore` | the core library `AndroidRapidTransferCore`, its tests, and the device probes |
 | `native/MTPKit` | the MTP layer: `MTPKit`, `SwiftMTP` and `USBWatcher` |
 | `docs/media` | the demo video and screenshots on this page |
 
@@ -286,7 +289,7 @@ Bug reports, device reports and pull requests are welcome.
   to attach it to.
 - **Tried it with your phone?** An issue saying which phone, what worked and how
   fast it was helps a lot: the app has been measured on only a few devices so far.
-- **Sending a change?** Keep `swift build` and `swift test` green in both packages,
+- **Sending a change?** Keep `swift build` and `swift test` green in every package,
   and try it against `--mock` (and a real phone, if the change touches the USB or
   transfer path).
 

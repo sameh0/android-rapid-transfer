@@ -3,9 +3,9 @@
 # The one entry point CI calls; every mode runs the same way on a Mac.
 #
 #   Scripts/ci-build.sh test
-#       Builds and tests native/MTPKit, then native/AndroidRapidTransfer, with
-#       compiler warnings treated as errors (ART_WARNINGS_AS_ERRORS=0 turns that
-#       off). Logs land in <output>/logs.
+#       Builds and tests native/MTPKit, native/ARTCore, then
+#       native/AndroidRapidTransfer, with compiler warnings treated as errors
+#       (ART_WARNINGS_AS_ERRORS=0 turns that off). Logs land in <output>/logs.
 #
 #   Scripts/ci-build.sh package
 #       Scripts/package-release.sh, then either Scripts/notarize.sh (Developer
@@ -40,7 +40,7 @@ PROJECT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 NATIVE_DIR=$(cd "$PROJECT_DIR/.." && pwd)
 REPO_ROOT=$(cd "$NATIVE_DIR/.." && pwd)
 RELEASE_DIR="$PROJECT_DIR/release"
-APP_VERSION_FILE="$PROJECT_DIR/Sources/AndroidRapidTransferCore/AppVersion.swift"
+APP_VERSION_FILE="$PROJECT_DIR/../ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 OUTPUT_DIR=${ART_CI_OUTPUT_DIR:-$PROJECT_DIR/ci-artifacts}
 LOG_DIR="$OUTPUT_DIR/logs"
 BUILD_INFO="$OUTPUT_DIR/build-info.txt"
@@ -120,7 +120,7 @@ run_tests() {
         note "Compiler warnings are errors (ART_WARNINGS_AS_ERRORS=0 to allow them)."
     fi
     local package summary=()
-    for package in MTPKit AndroidRapidTransfer; do
+    for package in MTPKit ARTCore AndroidRapidTransfer; do
         note "Building $package and its tests..."
         (cd "$NATIVE_DIR/$package" \
             && logged "$LOG_DIR/$package-build.log" swift build --build-tests ${flags[@]+"${flags[@]}"}) \
