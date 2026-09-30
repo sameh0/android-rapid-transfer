@@ -21,12 +21,16 @@ public struct AbnormalExitMonitor: Sendable {
     public static func defaultMarkerURL(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL {
+        #if os(Linux)
+        return XDGAppDirectories(environment: environment).state.appending(path: "session-running")
+        #else
         let home: URL = if let value = environment["HOME"], !value.isEmpty {
             URL(fileURLWithPath: value, isDirectory: true)
         } else {
             .homeDirectory
         }
         return home.appending(path: "Library/Application Support/\(AppIdentity.supportDirectoryName)/session-running")
+        #endif
     }
 
     /// Records that a session has started.

@@ -66,7 +66,7 @@ final class TransferCompletionNotifierTests: XCTestCase {
     func testNotificationTextReadsLikeThePanel() async {
         let clean = TransferCompletionNotification(summary: Self.summary(.completed, bytes: 2_000_000))
         XCTAssertEqual(clean.title, "All 12 files copied")
-        XCTAssertTrue(clean.body.hasSuffix("copied to this Mac"), clean.body)
+        XCTAssertTrue(clean.body.hasSuffix("copied " + TransferPanelPresentationTests.toThisComputer), clean.body)
 
         let failed = TransferCompletionNotification(summary: Self.summary(.failed(errorType: .unknown, message: "x")))
         XCTAssertTrue(failed.body.contains("needs attention"), failed.body)

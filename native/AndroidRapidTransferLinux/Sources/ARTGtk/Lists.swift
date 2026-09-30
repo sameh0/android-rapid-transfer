@@ -203,6 +203,20 @@ public final class SelectionModel: GObjectRef {
         gtk_selection_model_select_item(pointer.cast(), UInt32(position), exclusive.gbool)
     }
 
+    /// Makes exactly `positions` selected (one `selection-changed`).
+    public func setSelection(_ positions: some Sequence<Int>) {
+        let selected = gtk_bitset_new_empty()!
+        let mask = gtk_bitset_new_range(0, UInt32(count))!
+        defer {
+            gtk_bitset_unref(selected)
+            gtk_bitset_unref(mask)
+        }
+        for position in positions where position >= 0 && position < count {
+            gtk_bitset_add(selected, UInt32(position))
+        }
+        gtk_selection_model_set_selection(pointer.cast(), selected, mask)
+    }
+
     public func selectAll() { gtk_selection_model_select_all(pointer.cast()) }
     public func unselectAll() { gtk_selection_model_unselect_all(pointer.cast()) }
 
@@ -353,6 +367,25 @@ public final class GridView<Item>: Widget {
         set { gtk_grid_view_set_max_columns(pointer.cast(), newValue) }
     }
 
+    public var minColumns: UInt32 {
+        get { gtk_grid_view_get_min_columns(pointer.cast()) }
+        set { gtk_grid_view_set_min_columns(pointer.cast(), newValue) }
+    }
+
+    public var enablesRubberband: Bool {
+        get { gtk_grid_view_get_enable_rubberband(pointer.cast()).isTrue }
+        set { gtk_grid_view_set_enable_rubberband(pointer.cast(), newValue.gbool) }
+    }
+
+    /// Scrolls to `position`, optionally selecting and focusing it.
+    public func scrollTo(_ position: Int, select: Bool = false, focus: Bool = false) {
+        guard position >= 0, position < pipeline.visibleCount else { return }
+        var flags = GTK_LIST_SCROLL_NONE.rawValue
+        if select { flags |= GTK_LIST_SCROLL_SELECT.rawValue }
+        if focus { flags |= GTK_LIST_SCROLL_FOCUS.rawValue }
+        gtk_grid_view_scroll_to(pointer.cast(), UInt32(position), GtkListScrollFlags(rawValue: flags), nil)
+    }
+
     public func onActivate(_ body: @escaping @MainActor (Item, Int) -> Void) {
         let pipeline = pipeline
         connectUInt("activate") { position in
@@ -373,13 +406,47 @@ public final class ColumnView<Item>: Widget {
     public let pipeline: ListPipeline<Item>
     public private(set) var columns: [ColumnViewColumn<Item>] = []
 
-    public init(store: ListStore<Item>, selection: SelectionMode = .multiple) {
+    /// - Parameter sortsModel: false leaves the rows in the store's order and
+    ///   only reports header clicks (``onSortChanged(_:)``), for callers that
+    ///   sort the data themselves.
+    public init(store: ListStore<Item>, selection: SelectionMode = .multiple, sortsModel: Bool = true) {
         let view = rawPtr(gtk_column_view_new(nil))!
         // The view's sorter follows the clicked header; the sort model uses it.
-        let sorter = rawPtr(gtk_column_view_get_sorter(view.cast()))
+        let sorter = sortsModel ? rawPtr(gtk_column_view_get_sorter(view.cast())) : nil
         pipeline = ListPipeline(store: store, sorter: sorter, mode: selection)
         super.init(view)
         gtk_column_view_set_model(pointer.cast(), pipeline.selection.pointer.cast())
+    }
+
+    /// Runs when the user clicks a sortable header, with the column now
+    /// sorted by (nil = unsorted) and its direction.
+    public func onSortChanged(_ body: @escaping @MainActor (_ column: ColumnViewColumn<Item>?, _ ascending: Bool) -> Void) {
+        guard let sorter = gtk_column_view_get_sorter(pointer.cast()) else { return }
+        let sorterRef = GObjectRef(UnsafeMutableRawPointer(sorter), .retain)
+        retainForLifetime(sorterRef)
+        let weakSelf = Weak(self)
+        sorterRef.connect("changed") {
+            guard let self = weakSelf.value,
+                  let raw = gtk_column_view_get_sorter(self.pointer.cast()) else { return }
+            let primary = gtk_column_view_sorter_get_primary_sort_column(OpaquePointer(raw))
+            let order = gtk_column_view_sorter_get_primary_sort_order(OpaquePointer(raw))
+            let column = self.columns.first { primary != nil && $0.pointer == UnsafeMutableRawPointer(primary!) }
+            body(column, order == GTK_SORT_ASCENDING)
+        }
+    }
+
+    /// Scrolls to `position`, optionally selecting and focusing it.
+    public func scrollTo(_ position: Int, select: Bool = false, focus: Bool = false) {
+        guard position >= 0, position < pipeline.visibleCount else { return }
+        var flags = GTK_LIST_SCROLL_NONE.rawValue
+        if select { flags |= GTK_LIST_SCROLL_SELECT.rawValue }
+        if focus { flags |= GTK_LIST_SCROLL_FOCUS.rawValue }
+        gtk_column_view_scroll_to(pointer.cast(), UInt32(position), nil, GtkListScrollFlags(rawValue: flags), nil)
+    }
+
+    public var enablesRubberband: Bool {
+        get { gtk_column_view_get_enable_rubberband(pointer.cast()).isTrue }
+        set { gtk_column_view_set_enable_rubberband(pointer.cast(), newValue.gbool) }
     }
 
     public func append(_ column: ColumnViewColumn<Item>) {

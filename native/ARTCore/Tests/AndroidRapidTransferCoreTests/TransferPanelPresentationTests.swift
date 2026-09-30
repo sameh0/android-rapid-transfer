@@ -8,6 +8,14 @@ import XCTest
 /// dialog's comparison details.
 @MainActor
 final class TransferPanelPresentationTests: XCTestCase {
+    #if os(Linux)
+    nonisolated static let toThisComputer = "to this computer"
+    nonisolated static let thisMacStorageFull = "Not enough space on this computer"
+    #else
+    nonisolated static let toThisComputer = "to this Mac"
+    nonisolated static let thisMacStorageFull = "Not enough space on this Mac"
+    #endif
+
     // MARK: - Failure copy
 
     func testFailuresGetHumanTitlesAndKeepTheirTechnicalDetail() async {
@@ -17,7 +25,7 @@ final class TransferPanelPresentationTests: XCTestCase {
             (.device(.fileTransfer), "ErrorFileTransfer: an error occured while uploading files. StoreFull", .upload,
              "Not enough space on the phone"),
             (.device(.localFileRead), "ErrorLocalFileRead: /Users/me/a.mov: no space left on device", .download,
-             "Not enough space on this Mac"),
+             Self.thisMacStorageFull),
             (.device(.fileTransfer), "ErrorFileTransfer: an error occured while uploading files. string too long", .upload,
              "File name too long"),
             (.device(.invalidPath), "ErrorInvalidPath: disallowed file .thumbnails", .download, "File name not allowed"),
@@ -158,7 +166,7 @@ final class TransferPanelPresentationTests: XCTestCase {
         ]))
         XCTAssertTrue(many.isCleanSuccess)
         XCTAssertEqual(many.headline, "All 128 files copied")
-        XCTAssertEqual(many.destinationPhrase, "to this Mac")
+        XCTAssertEqual(many.destinationPhrase, Self.toThisComputer)
         XCTAssertEqual(many.bytesCopied, 1_000)
 
         let single = try XCTUnwrap(TransferSessionSummary(rows: [Self.row(.completed, sources: 1)]))

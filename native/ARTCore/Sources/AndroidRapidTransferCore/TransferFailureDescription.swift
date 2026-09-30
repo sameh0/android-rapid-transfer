@@ -156,8 +156,13 @@ public struct TransferFailureDescription: Equatable, Sendable {
              "Tap Allow on the phone’s “Allow access to phone data?” prompt, then try again.")
         case .phoneStorageFull:
             ("Not enough space on the phone", "Free up space on the phone, then try again.")
+        #if os(Linux)
+        case .macStorageFull:
+            ("Not enough space on this computer", "Free up space on this computer or pick another folder.")
+        #else
         case .macStorageFull:
             ("Not enough space on this Mac", "Free up space on this Mac or pick another folder.")
+        #endif
         case .phoneStorageUnavailable:
             ("Phone storage unavailable",
              "The phone isn’t sharing this storage right now. Unlock it or reinsert the SD card.")
@@ -175,6 +180,16 @@ public struct TransferFailureDescription: Equatable, Sendable {
             direction == .download
                 ? ("File no longer on the phone", "It may have been moved or deleted. Refresh and try again.")
                 : ("File or folder not found", "It may have been moved or deleted. Refresh and try again.")
+        #if os(Linux)
+        case .permissionDenied:
+            direction == .download
+                ? ("Can’t save here", "You don’t have permission to write to that folder. Pick another one.")
+                : ("Access denied", "The file couldn’t be read, or the phone refused it.")
+        case .localFileProblem:
+            direction == .download
+                ? ("Couldn’t save the file", "Something went wrong writing to this computer. Try again.")
+                : ("Couldn’t read the file", "Check the file still opens on this computer, then try again.")
+        #else
         case .permissionDenied:
             direction == .download
                 ? ("Can’t save here", "This Mac won’t let the app write to that folder. Pick another one.")
@@ -183,6 +198,7 @@ public struct TransferFailureDescription: Equatable, Sendable {
             direction == .download
                 ? ("Couldn’t save the file", "Something went wrong writing to this Mac. Try again.")
                 : ("Couldn’t read the file", "Check the file still opens on this Mac, then try again.")
+        #endif
         case .phoneBusy:
             ("Phone is busy", "Wait a moment, then try again.")
         case .replaceIncomplete:

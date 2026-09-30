@@ -139,8 +139,12 @@ public final class AppSettings {
     public static func defaultSettingsURL(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL {
+        #if os(Linux)
+        XDGAppDirectories(environment: environment).config.appending(path: "settings.json")
+        #else
         homeDirectory(environment: environment)
             .appending(path: "Library/Application Support/\(AppIdentity.supportDirectoryName)/settings.json")
+        #endif
     }
 
     private func persist() {

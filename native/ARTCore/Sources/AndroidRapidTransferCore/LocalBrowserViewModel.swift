@@ -4,7 +4,11 @@ import Observation
 @MainActor
 @Observable
 public final class LocalBrowserViewModel: BrowserPaneModel {
+    #if os(Linux)
+    public let title = "This Computer"
+    #else
     public let title = "This Mac"
+    #endif
     public private(set) var entries: [BrowserEntry] = [] {
         didSet {
             selection.updateOrderedIDs(entries.map(\.id))

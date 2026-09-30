@@ -1,9 +1,9 @@
 import CGtk
 
 /// Hands a GAsyncReadyCallback result back to a boxed Swift closure.
-private typealias AsyncDone = @MainActor (UnsafeMutableRawPointer?, OpaquePointer?) -> Void
+typealias AsyncDone = @MainActor (UnsafeMutableRawPointer?, OpaquePointer?) -> Void
 
-private let asyncReadyTrampoline: GAsyncReadyCallback = { source, result, data in
+let asyncReadyTrampoline: GAsyncReadyCallback = { source, result, data in
     let box = Boxed<AsyncDone>.take(data!)
     nonisolated(unsafe) let source = rawPtr(source)
     nonisolated(unsafe) let result = result

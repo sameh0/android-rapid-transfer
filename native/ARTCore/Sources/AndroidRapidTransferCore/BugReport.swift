@@ -308,4 +308,37 @@ public enum BugReportLinks {
         ]
         return components.url ?? issuesURL
     }
+
+    #if os(Linux)
+    /// The Linux new-issue page: the distribution instead of the macOS
+    /// version, and the report is wherever the user chose to save it.
+    public static func newIssueURL(
+        appVersion: String,
+        linuxVersion: String,
+        reportFileName: String = BugReportGenerator.defaultFileName
+    ) -> URL {
+        let body = """
+        **Describe the problem**
+
+
+        **Steps to reproduce**
+        1.
+
+        **Environment**
+        - \(AppIdentity.name): \(appVersion)
+        - Linux: \(linuxVersion)
+
+        **Bug report**
+        Please attach `\(reportFileName)` from the folder you saved it in by dragging it into this box.
+        """
+        var components = URLComponents(
+            url: issuesURL.appending(path: "new"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "body", value: body)
+        ]
+        return components.url ?? issuesURL
+    }
+    #endif
 }

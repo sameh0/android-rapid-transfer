@@ -143,12 +143,53 @@ final class AppSettingsTests: XCTestCase {
 
     func testDefaultURLUsesInjectedHome() async {
         let home = URL(fileURLWithPath: "/tmp/art-test-home", isDirectory: true)
+        #if os(Linux)
+        XCTAssertEqual(
+            AppSettings.defaultSettingsURL(environment: ["HOME": home.path]).path,
+            "/tmp/art-test-home/.config/\(AppIdentity.supportDirectoryName)/settings.json"
+        )
+        XCTAssertEqual(
+            AppSettings.defaultSettingsURL(environment: ["HOME": home.path, "XDG_CONFIG_HOME": "/tmp/xdg-config"]).path,
+            "/tmp/xdg-config/\(AppIdentity.supportDirectoryName)/settings.json"
+        )
+        #else
         XCTAssertEqual(
             AppSettings.defaultSettingsURL(environment: ["HOME": home.path]).path,
             home.appending(
                 path: "Library/Application Support/\(AppIdentity.supportDirectoryName)/settings.json"
             ).path
         )
+        #endif
+    }
+
+    func testXDGAppDirectoriesFollowTheSpecification() {
+        let defaults = XDGAppDirectories(environment: ["HOME": "/home/u"], directoryName: "app")
+        XCTAssertEqual(defaults.config.path, "/home/u/.config/app")
+        XCTAssertEqual(defaults.state.path, "/home/u/.local/state/app")
+        XCTAssertEqual(defaults.data.path, "/home/u/.local/share/app")
+
+        let custom = XDGAppDirectories(environment: [
+            "HOME": "/home/u",
+            "XDG_CONFIG_HOME": "/c",
+            "XDG_STATE_HOME": "/s",
+            // Relative values are invalid and ignored.
+            "XDG_DATA_HOME": "relative/data"
+        ], directoryName: "app")
+        XCTAssertEqual(custom.config.path, "/c/app")
+        XCTAssertEqual(custom.state.path, "/s/app")
+        XCTAssertEqual(custom.data.path, "/home/u/.local/share/app")
+    }
+
+    func testDeviceAccessProblemsAreRecognisedFromTheTransportText() {
+        let busy = DeviceAccessProblem(message: "ErrorDeviceSetup: could not open the MTP interface: claiming interface 0 of /dev/bus/usb/003/010: gvfsd-mtp (pid 42) is using the phone (exclusiveAccess, errno 16)")
+        XCTAssertEqual(busy?.deviceNodePath, "/dev/bus/usb/003/010")
+        if case .busy = busy {} else { XCTFail("not busy: \(String(describing: busy))") }
+
+        let denied = DeviceAccessProblem(message: "could not open the MTP interface: cannot open /dev/bus/usb/001/007: Permission denied. /dev/bus/usb/001/007 is owned by root:root (notPermitted, errno 13)")
+        XCTAssertEqual(denied?.deviceNodePath, "/dev/bus/usb/001/007")
+        if case .permissionDenied = denied {} else { XCTFail("not permission: \(String(describing: denied))") }
+
+        XCTAssertNil(DeviceAccessProblem(message: "ErrorMtpDetectFailed: no MTP devices found"))
     }
 
     func testOnboardingIsRequiredOnFirstLaunch() async throws {

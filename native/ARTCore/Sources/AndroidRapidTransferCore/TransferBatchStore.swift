@@ -263,10 +263,14 @@ public actor TransferBatchStore {
     }
 
     private static func defaultDirectoryURL() -> URL {
+        #if os(Linux)
+        return XDGAppDirectories().data.appending(path: "Batches", directoryHint: .isDirectory)
+        #else
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first ?? FileManager.default.temporaryDirectory
         return base.appending(path: "\(AppIdentity.supportDirectoryName)/Batches", directoryHint: .isDirectory)
+        #endif
     }
 }

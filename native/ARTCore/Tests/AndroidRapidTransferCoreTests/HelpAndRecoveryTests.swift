@@ -45,7 +45,11 @@ final class AbnormalExitMonitorTests: XCTestCase {
 
     func testDefaultMarkerSitsWithTheSettings() {
         let url = AbnormalExitMonitor.defaultMarkerURL(environment: ["HOME": "/tmp/fakehome"])
+        #if os(Linux)
+        XCTAssertEqual(url.path, "/tmp/fakehome/.local/state/\(AppIdentity.supportDirectoryName)/session-running")
+        #else
         XCTAssertEqual(url.path, "/tmp/fakehome/Library/Application Support/\(AppIdentity.supportDirectoryName)/session-running")
+        #endif
     }
 
     @MainActor
@@ -143,7 +147,12 @@ final class HelpContentTests: XCTestCase {
     func testInterferingAppsNameTheKnownCulprits() {
         let topic = HelpContent.topics().first { $0.id == "interfering-apps" }
         let text = (topic?.sections ?? []).flatMap { [$0.title] + $0.paragraphs }.joined(separator: "\n")
-        for app in ["Android File Transfer", "Google Drive", "Dropbox", "OneDrive", "Image Capture", "Smart Switch"] {
+        #if os(Linux)
+        let culprits = ["Files (GNOME)", "GVFS", "KDE", "kiod", "Shotwell", "gphoto2"]
+        #else
+        let culprits = ["Android File Transfer", "Google Drive", "Dropbox", "OneDrive", "Image Capture", "Smart Switch"]
+        #endif
+        for app in culprits {
             XCTAssertTrue(text.contains(app), "missing \(app)")
         }
     }

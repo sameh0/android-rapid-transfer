@@ -416,6 +416,16 @@ public final class DeviceConnectionController {
                 )
             }
 
+            #if os(Linux)
+            // Another program holding the phone, or a device node this user
+            // may not open, is not cured by a replug: report it as an error
+            // the device pane can explain, with the transport's detail.
+            if DeviceAccessProblem(error: error) != nil {
+                endReconnecting()
+                state = .error(message: ErrorDescription.message(for: error), retryable: true)
+                return
+            }
+            #endif
             switch ConnectionFatalClassifier.disposition(for: error) {
             case .requiresReplug:
                 endReconnecting()

@@ -44,13 +44,17 @@ public enum HelpContent {
     }
 
     public static func topics(appName: String = AppIdentity.name) -> [HelpTopic] {
-        [
+        #if os(Linux)
+        return linuxTopics(appName: appName)
+        #else
+        return [
             notDetected(appName: appName),
             allowAccess(appName: appName),
             interferingApps(appName: appName),
             connectionProblems(appName: appName),
             macPermissions(appName: appName)
         ]
+        #endif
     }
 
     private static func notDetected(appName: String) -> HelpTopic {
@@ -259,7 +263,10 @@ public enum PrivacyContent {
         appName: String = AppIdentity.name,
         bugReportContents: [BugReportItem] = BugReportGenerator.contents()
     ) -> [HelpSection] {
-        [
+        #if os(Linux)
+        return linuxSections(appName: appName, bugReportContents: bugReportContents)
+        #else
+        return [
             HelpSection(
                 id: "no-tracking",
                 title: String(localized: "No analytics or tracking"),
@@ -303,5 +310,6 @@ public enum PrivacyContent {
                 ]
             )
         ]
+        #endif
     }
 }

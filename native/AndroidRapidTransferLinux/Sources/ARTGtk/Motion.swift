@@ -74,7 +74,9 @@ public struct MotionPolicy: Sendable, Equatable {
         let enabled = art_object_get_bool(p, "gtk-enable-animations").isTrue
         var reduce = false
         if art_object_has_property(p, "gtk-interface-reduced-motion").isTrue {
-            reduce = art_object_get_int(p, "gtk-interface-reduced-motion") == Int32(GTK_REDUCED_MOTION_REDUCE.rawValue)
+            // 1 is GTK_REDUCED_MOTION_REDUCE; spelled as a number because the
+            // enum only exists in GTK 4.22+ headers and this builds against older ones.
+            reduce = art_object_get_int(p, "gtk-interface-reduced-motion") == 1
         }
         return MotionPolicy(animationsEnabled: enabled, reduceMotion: reduce)
     }

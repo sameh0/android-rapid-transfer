@@ -8,6 +8,10 @@ public struct XDGUserDirectories: Sendable, Equatable {
     public let home: URL
     public let desktop: URL
     public let downloads: URL
+    public let documents: URL
+    public let music: URL
+    public let pictures: URL
+    public let videos: URL
 
     public init(
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -37,6 +41,10 @@ public struct XDGUserDirectories: Sendable, Equatable {
         self.home = home
         desktop = resolve("XDG_DESKTOP_DIR", "Desktop")
         downloads = resolve("XDG_DOWNLOAD_DIR", "Downloads")
+        documents = resolve("XDG_DOCUMENTS_DIR", "Documents")
+        music = resolve("XDG_MUSIC_DIR", "Music")
+        pictures = resolve("XDG_PICTURES_DIR", "Pictures")
+        videos = resolve("XDG_VIDEOS_DIR", "Videos")
     }
 
     /// Parses `KEY="value"` lines; comments and other lines are ignored.

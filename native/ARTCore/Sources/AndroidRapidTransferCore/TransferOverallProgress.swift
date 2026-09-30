@@ -226,7 +226,11 @@ public struct TransferSessionSummary: Equatable, Sendable, Identifiable {
     /// "to this Mac" / "to the phone", when the whole session went one way.
     public var destinationPhrase: String? {
         switch direction {
+        #if os(Linux)
+        case .download: "to this computer"
+        #else
         case .download: "to this Mac"
+        #endif
         case .upload: "to the phone"
         case nil: nil
         }
