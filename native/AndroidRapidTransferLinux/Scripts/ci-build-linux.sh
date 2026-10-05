@@ -37,6 +37,8 @@ NATIVE_DIR=$(cd "$PROJECT_DIR/.." && pwd)
 REPO_ROOT=$(cd "$NATIVE_DIR/.." && pwd)
 APP_VERSION_FILE="$NATIVE_DIR/ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift"
 OUTPUT_DIR=${ART_CI_OUTPUT_DIR:-$PROJECT_DIR/ci-artifacts}
+# Absolute: the build steps run from inside each package directory.
+[[ "$OUTPUT_DIR" == /* ]] || OUTPUT_DIR="$PWD/$OUTPUT_DIR"
 LOG_DIR="$OUTPUT_DIR/logs"
 SELF_TESTS=${ART_LINUX_SELF_TESTS:-art-gtk-demo android-rapid-transfer}
 ARCH=$(uname -m)

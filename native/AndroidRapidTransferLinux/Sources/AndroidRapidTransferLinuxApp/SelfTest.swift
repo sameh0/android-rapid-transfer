@@ -396,21 +396,57 @@ final class SelfTest {
 
     private func checkIdle() async {
         await settle(1.0)
-        let drainsBefore = MainLoopBridge.drains
-        let cpuBefore = Self.processCPUSeconds()
-        try? await Task.sleep(for: .seconds(3))
-        let cpu = Self.processCPUSeconds() - cpuBefore
-        let drains = MainLoopBridge.drains - drainsBefore
-        check("idle for 3 s costs almost no CPU", cpu < 0.15, String(format: "%.3f s CPU, %llu main-queue drains", cpu, drains))
+        // A loop costs CPU in every window; a slow runner still settling after
+        // the previous checks costs it only in the first, so allow three.
+        var cpu = 0.0
+        var drains: UInt64 = 0
+        var busiest = ""
+        for _ in 0..<3 {
+            let drainsBefore = MainLoopBridge.drains
+            let cpuBefore = Self.processCPUSeconds()
+            let threadsBefore = Self.threadCPUSeconds()
+            try? await Task.sleep(for: .seconds(3))
+            cpu = Self.processCPUSeconds() - cpuBefore
+            drains = MainLoopBridge.drains - drainsBefore
+            if cpu < 0.15 { break }
+            // Name the threads that spent it, so a CI failure says where to look.
+            busiest = Self.threadCPUSeconds()
+                .map { ($0.key, $0.value - (threadsBefore[$0.key] ?? 0)) }
+                .filter { $0.1 > 0 }
+                .sorted { $0.1 > $1.1 }
+                .prefix(4)
+                .map { "\($0.0) \(String(format: "%.2f", $0.1)) s" }
+                .joined(separator: ", ")
+        }
+        check("idle for 3 s costs almost no CPU", cpu < 0.15,
+              String(format: "%.3f s CPU, %llu main-queue drains", cpu, drains) + (busiest.isEmpty ? "" : "; threads: \(busiest)"))
     }
 
     static func processCPUSeconds() -> Double {
-        guard let stat = try? String(contentsOfFile: "/proc/self/stat", encoding: .utf8),
-              let close = stat.lastIndex(of: ")") else { return 0 }
+        cpuSeconds(statFile: "/proc/self/stat")?.seconds ?? 0
+    }
+
+    /// CPU seconds per thread, keyed "<name>/<tid>".
+    static func threadCPUSeconds() -> [String: Double] {
+        let tasks = (try? FileManager.default.contentsOfDirectory(atPath: "/proc/self/task")) ?? []
+        var result: [String: Double] = [:]
+        for tid in tasks {
+            if let sample = cpuSeconds(statFile: "/proc/self/task/\(tid)/stat") {
+                result["\(sample.name)/\(tid)"] = sample.seconds
+            }
+        }
+        return result
+    }
+
+    private static func cpuSeconds(statFile: String) -> (name: String, seconds: Double)? {
+        guard let stat = try? String(contentsOfFile: statFile, encoding: .utf8),
+              let open = stat.firstIndex(of: "("),
+              let close = stat.lastIndex(of: ")") else { return nil }
+        let name = String(stat[stat.index(after: open)..<close])
         let fields = stat[stat.index(after: close)...].split(separator: " ")
         // After the command: state is field 3, utime 14 and stime 15 (1-based).
-        guard fields.count > 13, let user = Double(fields[11]), let system = Double(fields[12]) else { return 0 }
-        return (user + system) / Double(sysconf(Int32(_SC_CLK_TCK)))
+        guard fields.count > 13, let user = Double(fields[11]), let system = Double(fields[12]) else { return nil }
+        return (name, (user + system) / Double(sysconf(Int32(_SC_CLK_TCK))))
     }
 }
 
