@@ -13,7 +13,7 @@
 #                otherwise the tree Scripts/linux-build.sh staged, which is
 #                built first if missing
 #   --udev-rule  also install (or remove) the optional udev rule in
-#                /etc/udev/rules.d and reload udev; needs root (see PACKAGING.md)
+#                /etc/udev/rules.d and reload udev; needs root
 #   --uninstall  remove what an earlier install put under the prefix
 #
 # The files installed are listed in <prefix>/share/android-rapid-transfer/

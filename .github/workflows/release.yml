@@ -16,7 +16,7 @@
 #
 # Secrets, all optional; without them the DMG is ad-hoc signed and every
 # signing, notarization and appcast step says what it skipped and why. The
-# checklist is in native/AndroidRapidTransfer/DISTRIBUTION.md:
+# secrets are:
 #   DEVELOPER_ID_P12_BASE64, DEVELOPER_ID_P12_PASSWORD   Developer ID certificate
 #   DEVELOPER_ID_APP (optional; read from the certificate)
 #   APPLE_ID, TEAM_ID, APP_PASSWORD                      notarization, Apple ID
@@ -181,7 +181,7 @@ jobs:
             if [[ "$SIGNING" != developer-id ]]; then
               echo "> [!WARNING]"
               echo "> This build is **ad-hoc signed**: it is not signed with a Developer ID and not notarized,"
-              echo "> so macOS Gatekeeper will warn when it is first opened. See DISTRIBUTION.md."
+              echo "> so macOS Gatekeeper will warn when it is first opened."
               echo
             fi
             echo "### SHA-256"
@@ -225,8 +225,7 @@ jobs:
   # The Linux artifacts (tarball, AppImage with its .zsync, .deb, .rpm) for
   # x86_64 and aarch64, built in Ubuntu 26.04 by
   # native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh package, which
-  # runs the same way on a Linux machine. See
-  # native/AndroidRapidTransferLinux/PACKAGING.md.
+  # runs the same way on a Linux machine.
   linux-package:
     name: Package Linux (${{ matrix.arch }})
     strategy:

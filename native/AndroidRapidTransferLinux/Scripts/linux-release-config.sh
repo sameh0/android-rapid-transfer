@@ -21,7 +21,7 @@ LINUX_MAINTAINER="${LINUX_MAINTAINER:-Sameh <sameh0@users.noreply.github.com>}"
 LINUX_LICENSE="MIT"
 
 # Oldest runtime libraries the binary works with, from the newest symbols
-# ARTGtk calls (see PACKAGING.md): AdwSpinner is libadwaita 1.6;
+# ARTGtk calls: AdwSpinner is libadwaita 1.6;
 # gtk_css_provider_load_from_string and gtk_window_is_suspended are GTK 4.12.
 LINUX_MIN_GTK="4.12"
 LINUX_MIN_ADWAITA="1.6"

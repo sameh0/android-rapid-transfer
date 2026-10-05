@@ -29,12 +29,12 @@ self-contained.
 - Run: `swift run AndroidRapidTransfer` (real device) or `swift run AndroidRapidTransfer --mock`
   (a built-in mock phone; debug builds add a Debug menu for failure injection).
 - Dev bundle: `native/AndroidRapidTransfer/make-app.sh` → `native/AndroidRapidTransfer/dist/Android Rapid Transfer.app`.
-  Releases: `native/AndroidRapidTransfer/DISTRIBUTION.md`. Every packaging script checks
+  Every packaging script checks
   the bundle with `verify_bundle_layout` (only the app and Sparkle in MacOS/Frameworks).
 - CI: `.github/workflows/ci.yml` (tests) and `release.yml` (DMG artifact; draft release on
   `v*` tags) only call `native/AndroidRapidTransfer/Scripts/ci-build.sh test|package|appcast`,
   so reproduce CI failures locally with that script. Signing secrets are optional (ad-hoc
-  `*-adhoc.dmg` without them); the checklist is in DISTRIBUTION.md.
+  `*-adhoc.dmg` without them).
 - Cold `swift build` in a fresh checkout or worktree takes minutes — run it in the
   background, not as a silent foreground command.
 - Animation: use the tokens and helpers in `Sources/AndroidRapidTransfer/Motion.swift`

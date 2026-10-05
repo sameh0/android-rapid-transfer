@@ -1,5 +1,4 @@
-# Flatpak manifest. Not built by CI yet; see PACKAGING.md ("Flatpak") for how
-# to build it and for what still stands between it and Flathub.
+# Flatpak manifest. Not built by CI yet.
 #
 #   flatpak-builder --user --install --force-clean build-dir \
 #       native/AndroidRapidTransferLinux/packaging/com.sameh.AndroidRapidTransfer.yml
@@ -40,7 +39,7 @@ modules:
     sources:
       # The repository checkout this manifest lives in. SwiftPM needs its
       # package dependencies available offline (flatpak-builder has no network
-      # during the build); see PACKAGING.md.
+      # during the build).
       - type: dir
         path: ../../..
         skip:

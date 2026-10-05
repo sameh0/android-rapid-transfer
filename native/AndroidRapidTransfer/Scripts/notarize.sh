@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Developer ID signs the app package-release.sh built, makes its DMG and
-# notarizes it. See DISTRIBUTION.md for the credentials it needs.
+# notarizes it. It needs the Developer ID and notarization credentials in the environment.
 #
 #   Scripts/notarize.sh
 #

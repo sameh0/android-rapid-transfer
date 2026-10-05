@@ -6,8 +6,8 @@
 #   Scripts/linux-ci-setup.sh [--no-apt] [--toolchain-dir DIR]
 #
 # Why not the official swift:6.3 images: the newest of them is Ubuntu 24.04,
-# whose libadwaita (1.5) and GTK (4.14) are older than the app needs (see
-# PACKAGING.md), and no Swift 6.3 build exists for Ubuntu 26.04. So this
+# whose libadwaita (1.5) and GTK (4.14) are older than the app needs, and
+# no Swift 6.3 build exists for Ubuntu 26.04. So this
 # installs the official Swift 6.3 build for Ubuntu 24.04, checked against a
 # pinned SHA-256, and supplies the one library its tools need that 26.04 no
 # longer ships: libxml2.so.2 (26.04 has libxml2.so.16), with the ICU it links,

@@ -163,9 +163,7 @@ uses the app's built-in demo phone, whose copies run at about the measured speed
 
 If macOS says the app can't be checked for malicious software, Control-click (or
 right-click) it in Applications, choose **Open**, and confirm. Builds that aren't
-yet notarized need this once; see
-[DISTRIBUTION.md](native/AndroidRapidTransfer/DISTRIBUTION.md#what-ad-hoc-signing-means-for-recipients)
-for details.
+yet notarized need this once.
 
 **Homebrew** *(coming soon)*: `brew install --cask android-rapid-transfer`.
 
@@ -183,9 +181,8 @@ Each release carries a `.deb`, an `.rpm`, an AppImage and a tarball:
   tarball and run its `install.sh` (installs into `~/.local`; `--uninstall`
   removes it).
 
-Then start **Android Rapid Transfer** from the app launcher. The packages and how
-they are built are described in
-[PACKAGING.md](native/AndroidRapidTransferLinux/PACKAGING.md).
+Then start **Android Rapid Transfer** from the app launcher. The packages are
+built by `native/AndroidRapidTransferLinux/Scripts/linux-package.sh`.
 
 ## Connect your phone
 
@@ -316,9 +313,7 @@ cd ../AndroidRapidTransfer
 
 A first build takes a few minutes. The app icon is drawn in code
 (`AppIconArtwork`); after changing it, run `Scripts/make-app-icon.sh` to regenerate
-`Resources/AppIcon.icns`. Signing, notarization, disk images and publishing
-updates are covered in
-[DISTRIBUTION.md](native/AndroidRapidTransfer/DISTRIBUTION.md), as is CI:
+`Resources/AppIcon.icns`. CI:
 `Scripts/ci-build.sh test` and `Scripts/ci-build.sh package` run exactly what
 GitHub Actions runs, the latter producing the universal DMG in `ci-artifacts/`.
 
