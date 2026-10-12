@@ -54,7 +54,9 @@ env:
 jobs:
   package:
     name: Package DMG
-    runs-on: ${{ vars.ART_MACOS_RUNNER || 'macos-26' }}
+    # Only standard GitHub-hosted labels (free on a public repository); any
+    # other ART_MACOS_RUNNER value, e.g. a paid -large/-xlarge label, is ignored.
+    runs-on: ${{ contains(fromJSON('["macos-26", "macos-15", "macos-latest", "xcode-27"]'), vars.ART_MACOS_RUNNER) && vars.ART_MACOS_RUNNER || 'macos-26' }}
     timeout-minutes: 90
     outputs:
       version: ${{ steps.package.outputs.version }}

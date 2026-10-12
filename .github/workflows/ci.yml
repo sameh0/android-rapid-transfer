@@ -7,7 +7,9 @@
 # Toolchain, as repository variables (Settings > Secrets and variables >
 # Actions > Variables), both optional:
 #   ART_MACOS_RUNNER   runner label; default macos-26. `xcode-27` is GitHub's
-#                      Xcode 27 preview image.
+#                      Xcode 27 preview image. Only free standard labels are
+#                      honoured (macos-26, macos-15, macos-latest, xcode-27);
+#                      anything else falls back to macos-26.
 #   ART_XCODE_VERSION  Xcode to select; default `latest` (newest release Xcode
 #                      on the runner). Also `latest-prerelease` or a version
 #                      such as 26.6. See Scripts/ci-select-xcode.sh.
@@ -36,7 +38,9 @@ env:
 jobs:
   test:
     name: Build and test
-    runs-on: ${{ vars.ART_MACOS_RUNNER || 'macos-26' }}
+    # Only standard GitHub-hosted labels (free on a public repository); any
+    # other ART_MACOS_RUNNER value, e.g. a paid -large/-xlarge label, is ignored.
+    runs-on: ${{ contains(fromJSON('["macos-26", "macos-15", "macos-latest", "xcode-27"]'), vars.ART_MACOS_RUNNER) && vars.ART_MACOS_RUNNER || 'macos-26' }}
     timeout-minutes: 60
     steps:
       - name: Check out
