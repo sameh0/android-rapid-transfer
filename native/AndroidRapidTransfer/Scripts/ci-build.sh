@@ -15,7 +15,7 @@
 #
 #   Scripts/ci-build.sh appcast <release-tag>
 #       Scripts/make-appcast.sh for a Developer ID build that `package` made,
-#       signed with SPARKLE_ED_PRIVATE_KEY; adds appcast.xml to <output>.
+#       signed with SPARKLE_PRIVATE_KEY; adds appcast.xml to <output>.
 #       Skipped (successfully) without the key or for an ad-hoc build.
 #
 #   Scripts/ci-build.sh verify [<dmg>]
@@ -30,7 +30,8 @@
 # NOTARY_API_ISSUER_ID (Scripts/notarize.sh reads the same variables).
 #   ART_SIGNING=auto|adhoc   adhoc ignores any credentials (default auto)
 #   ART_REQUIRE_SIGNING=1    fail instead of falling back to ad-hoc
-#   ART_RELEASE_TAG=v1.2.3   fail unless the tag is v<AppVersion.current>
+#   ART_RELEASE_TAG=v1.2.3   build that version: AppVersion.current is set from the
+#                            tag (see stamp_version_from_tag)
 #   BUILD_NUMBER             CFBundleVersion (see resolve_build_number)
 
 set -euo pipefail
@@ -76,6 +77,24 @@ app_version() {
     version=$(sed -nE 's/^[[:space:]]*public static let current = "([^"]+)"/\1/p' "$APP_VERSION_FILE")
     [[ -n "$version" ]] || fail "Could not read AppVersion.current from $APP_VERSION_FILE"
     echo "$version"
+}
+
+# ART_RELEASE_TAG=v<version> sets the version: AppVersion.current is rewritten
+# to it before anything reads or builds it, so the app, its package and every
+# artifact carry the tag's version without a version commit. The checkout is
+# left with that change (a CI checkout is thrown away; fastlane restores it).
+stamp_version_from_tag() {
+    local tag=${ART_RELEASE_TAG:-} version
+    [[ -n "$tag" ]] || return 0
+    [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?)$ ]] \
+        || fail "ART_RELEASE_TAG must look like v1.2.3 or v1.2.3-beta.1; got '$tag'"
+    version=${BASH_REMATCH[1]}
+    if [[ "$(app_version)" != "$version" ]]; then
+        sed -i.bak -E "s/^([[:space:]]*public static let current = \")[^\"]+(\")/\\1$version\\2/" "$APP_VERSION_FILE"
+        rm -f "$APP_VERSION_FILE.bak"
+        [[ "$(app_version)" == "$version" ]] || fail "Could not set AppVersion.current to $version in $APP_VERSION_FILE"
+    fi
+    note "Version $version, from tag $tag."
 }
 
 # Everything below runs with the Xcode DEVELOPER_DIR names (or xcode-select's).
@@ -325,7 +344,9 @@ write_build_info() {
     git_ref=${GITHUB_REF_NAME:-$(git -C "$REPO_ROOT" describe --tags --exact-match 2>/dev/null \
         || git -C "$REPO_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || echo detached)}
     dirty=false
-    [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]] && dirty=true
+    # A version stamped from the tag is not a local change.
+    [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no -- . \
+        ":(exclude)native/ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift" 2>/dev/null)" ]] && dirty=true
     if [[ "$SIGNING" == adhoc ]]; then
         signing_label="ad-hoc (unsigned: no Developer ID, not notarized; Gatekeeper will warn)"
     else
@@ -376,10 +397,8 @@ write_checksums() {
 run_package() {
     [[ $# -eq 0 ]] || usage
     require_xcode
+    stamp_version_from_tag
     APP_VERSION=$(app_version)
-    if [[ -n "${ART_RELEASE_TAG:-}" && "$ART_RELEASE_TAG" != "v$APP_VERSION" ]]; then
-        fail "Tag $ART_RELEASE_TAG does not match AppVersion.current ($APP_VERSION); expected v$APP_VERSION."
-    fi
     BUILD_NUMBER=$(resolve_build_number "$REPO_ROOT") || fail "Invalid build number"
     export BUILD_NUMBER
     decide_signing
@@ -451,8 +470,8 @@ run_appcast() {
     read_build_info
     [[ "$INFO_VERSION" == "$APP_VERSION" ]] \
         || fail "$BUILD_INFO is for $INFO_VERSION, but AppVersion.current is $APP_VERSION"
-    if [[ -z "${SPARKLE_ED_PRIVATE_KEY:-}" ]]; then
-        note "Sparkle appcast: skipped (no SPARKLE_ED_PRIVATE_KEY secret; export it with Sparkle's generate_keys -x)."
+    if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
+        note "Sparkle appcast: skipped (no SPARKLE_PRIVATE_KEY secret; export it with Sparkle's generate_keys -x)."
         return 0
     fi
     if [[ "$INFO_SIGNING" != developer-id ]]; then
@@ -465,8 +484,8 @@ run_appcast() {
     local channel=()
     [[ "$APP_VERSION" == *-* ]] && channel=(--beta)
 
-    # make-appcast.sh hands SPARKLE_ED_PRIVATE_KEY to generate_appcast on stdin.
-    export SPARKLE_ED_PRIVATE_KEY
+    # make-appcast.sh hands SPARKLE_PRIVATE_KEY to generate_appcast on stdin.
+    export SPARKLE_PRIVATE_KEY
     /bin/mkdir -p "$LOG_DIR"
     logged "$LOG_DIR/make-appcast.log" "$SCRIPT_DIR/make-appcast.sh" "$tag" ${channel[@]+"${channel[@]}"} \
         || fail "make-appcast.sh failed; see $LOG_DIR/make-appcast.log"

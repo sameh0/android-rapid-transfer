@@ -22,7 +22,7 @@
 #   APPLE_ID, TEAM_ID, APP_PASSWORD                      notarization, Apple ID
 #   NOTARY_API_KEY_P8_BASE64, NOTARY_API_KEY_ID,
 #   NOTARY_API_ISSUER_ID                                 notarization, API key
-#   SPARKLE_ED_PRIVATE_KEY                               appcast signing (tags)
+#   SPARKLE_PRIVATE_KEY                                  appcast signing (tags)
 #
 # Repository variables, all optional: ART_MACOS_RUNNER, ART_XCODE_VERSION (see
 # ci.yml) and ART_REQUIRE_SIGNING=1 (a tag build fails rather than falling
@@ -118,7 +118,7 @@ jobs:
       - name: Sparkle appcast
         if: github.ref_type == 'tag'
         env:
-          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: native/AndroidRapidTransfer/Scripts/ci-build.sh appcast "$GITHUB_REF_NAME"
 
       - name: Upload DMG

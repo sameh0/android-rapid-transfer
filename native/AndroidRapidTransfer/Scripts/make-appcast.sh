@@ -8,7 +8,7 @@
 # Run after Scripts/notarize.sh, once the GitHub release <release-tag> exists
 # (or will exist) with release/Android-Rapid-Transfer-<version>.dmg attached. Signing uses the
 # EdDSA private key in the login keychain; the keychain may ask to allow access.
-# SPARKLE_ED_PRIVATE_KEY (the key exported by generate_keys -x), when set, is
+# SPARKLE_PRIVATE_KEY (the key exported by generate_keys -x), when set, is
 # used instead, as CI does.
 #
 # Every earlier item is kept: the current appcast is downloaded from the feed
@@ -100,10 +100,10 @@ GENERATE_ARGS=(
     ${CHANNEL_ARGS[@]+"${CHANNEL_ARGS[@]}"}
     "$WORK_DIR"
 )
-if [[ -n "${SPARKLE_ED_PRIVATE_KEY:-}" ]]; then
+if [[ -n "${SPARKLE_PRIVATE_KEY:-}" ]]; then
     # CI: the exported key (generate_keys -x) arrives in the environment and is
     # handed to generate_appcast on standard input, never written to disk.
-    printf '%s\n' "$SPARKLE_ED_PRIVATE_KEY" | "$GENERATE_APPCAST" --ed-key-file - "${GENERATE_ARGS[@]}"
+    printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "$GENERATE_APPCAST" --ed-key-file - "${GENERATE_ARGS[@]}"
 else
     "$GENERATE_APPCAST" "${GENERATE_ARGS[@]}"
 fi

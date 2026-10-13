@@ -27,7 +27,8 @@
 #                          "VERIFICATION ok" (default: art-gtk-demo android-rapid-transfer)
 #   ART_LINUX_SCRATCH_ROOT build directories go in <root>/<package> instead of
 #                          each package's .build (for checkouts on slow disks)
-#   ART_RELEASE_TAG=v1.2.3 fail unless the tag is v<AppVersion.current>
+#   ART_RELEASE_TAG=v1.2.3 build that version: AppVersion.current is set from the
+#                          tag (see stamp_version_from_tag)
 
 set -euo pipefail
 
@@ -74,6 +75,24 @@ app_version() {
     version=$(sed -nE 's/^[[:space:]]*public static let current = "([^"]+)"/\1/p' "$APP_VERSION_FILE")
     [[ -n "$version" ]] || fail "Could not read AppVersion.current from $APP_VERSION_FILE"
     echo "$version"
+}
+
+# ART_RELEASE_TAG=v<version> sets the version: AppVersion.current is rewritten
+# to it before anything reads or builds it, so the app, its package and every
+# artifact carry the tag's version without a version commit. The checkout is
+# left with that change (a CI checkout is thrown away; fastlane restores it).
+stamp_version_from_tag() {
+    local tag=${ART_RELEASE_TAG:-} version
+    [[ -n "$tag" ]] || return 0
+    [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?)$ ]] \
+        || fail "ART_RELEASE_TAG must look like v1.2.3 or v1.2.3-beta.1; got '$tag'"
+    version=${BASH_REMATCH[1]}
+    if [[ "$(app_version)" != "$version" ]]; then
+        sed -i.bak -E "s/^([[:space:]]*public static let current = \")[^\"]+(\")/\\1$version\\2/" "$APP_VERSION_FILE"
+        rm -f "$APP_VERSION_FILE.bak"
+        [[ "$(app_version)" == "$version" ]] || fail "Could not set AppVersion.current to $version in $APP_VERSION_FILE"
+    fi
+    note "Version $version, from tag $tag."
 }
 
 scratch_args() { # scratch_args <package>
@@ -218,7 +237,9 @@ write_build_info() {
     git_ref=${GITHUB_REF_NAME:-$(git -C "$REPO_ROOT" describe --tags --exact-match 2>/dev/null \
         || git -C "$REPO_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || echo detached)}
     dirty=false
-    [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]] && dirty=true
+    # A version stamped from the tag is not a local change.
+    [[ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no -- . \
+        ":(exclude)native/ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift" 2>/dev/null)" ]] && dirty=true
     {
         echo "# $LINUX_APP_NAME Linux build information (KEY=value)"
         echo "APP_NAME=$LINUX_APP_NAME"
@@ -248,10 +269,8 @@ write_build_info() {
 run_package() {
     [[ $# -eq 0 ]] || usage
     toolchain_summary
+    stamp_version_from_tag
     APP_VERSION=$(app_version)
-    if [[ -n "${ART_RELEASE_TAG:-}" && "$ART_RELEASE_TAG" != "v$APP_VERSION" ]]; then
-        fail "Tag $ART_RELEASE_TAG does not match AppVersion.current ($APP_VERSION); expected v$APP_VERSION."
-    fi
     choose_product
 
     local resolved_output

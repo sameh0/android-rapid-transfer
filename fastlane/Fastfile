@@ -7,11 +7,14 @@
 #   bundle exec fastlane mac app             universal app, ad-hoc signed
 #   bundle exec fastlane mac dmg             Developer ID signed, notarized DMG + appcast
 #   bundle exec fastlane mac dmg adhoc:true  ad-hoc signed DMG, no credentials needed
+#   ... version:1.2.0                        build that version
 #
 # Output: native/AndroidRapidTransfer/release/ (app) and
 # native/AndroidRapidTransfer/ci-artifacts/ (DMG, appcast.xml, SHA256SUMS,
-# build-info.txt). The version is AppVersion.current; the build number is
-# build_number:N, else BUILD_NUMBER, else the commit count of HEAD. A CI tag
+# build-info.txt). The version is version:X, else the v<version> tag on HEAD,
+# else AppVersion.current; like a CI tag build, the lane writes it into
+# AppVersion.swift for the build and restores the file afterwards. The build
+# number is build_number:N, else BUILD_NUMBER, else the commit count of HEAD. A CI tag
 # build counts public commits, so pass the public count when a local DMG must
 # order correctly in Sparkle with CI releases.
 #
@@ -44,6 +47,39 @@ XCODE_DEVELOPER_DIR = "/Applications/Xcode.app/Contents/Developer"
 def app_version
   File.read(APP_VERSION_FILE)[/public static let current = "([^"]+)"/, 1] \
     || UI.user_error!("No AppVersion.current in #{APP_VERSION_FILE}")
+end
+
+VERSION_FORMAT = /\A\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?\z/
+VERSION_LINE = /^(\s*public static let current = ")[^"]+(")/
+
+# version:X, else the release tag on HEAD (v1.2.3 or v1.2.3-beta.1), else nil.
+def requested_version(options)
+  version = options[:version].to_s.delete_prefix("v")
+  if version.empty?
+    tags, = Open3.capture2("git", "-C", REPO_ROOT, "tag", "--points-at", "HEAD", "--list", "v*")
+    # Several (v1.0.0-beta.3 and v1.0.0 on one commit): the highest, a release
+    # above its prereleases.
+    version = tags.split.map { |tag| tag.delete_prefix("v") }.grep(VERSION_FORMAT)
+                  .max_by { |candidate| Gem::Version.new(candidate) }.to_s
+    return nil if version.empty?
+
+    UI.message("Version #{version}, from tag v#{version} on HEAD")
+  end
+  UI.user_error!("'#{version}' is not a version like 1.2.3 or 1.2.3-beta.1") unless version.match?(VERSION_FORMAT)
+  version
+end
+
+# Builds with AppVersion.current set to the version, then restores the file,
+# also when the build fails.
+def with_version(version)
+  original = File.read(APP_VERSION_FILE)
+  return yield(app_version) if version.nil? || version == app_version
+
+  File.write(APP_VERSION_FILE, original.sub(VERSION_LINE, "\\1#{version}\\2"))
+  UI.message("Building version #{version}")
+  yield version
+ensure
+  File.write(APP_VERSION_FILE, original) if original && File.read(APP_VERSION_FILE) != original
 end
 
 def with_env(variables)
@@ -122,47 +158,52 @@ platform :mac do
   end
 
   desc "Universal Android Rapid Transfer.app, ad-hoc signed, in native/AndroidRapidTransfer/release"
-  desc "Options: build_number"
+  desc "Options: version, build_number"
   lane :app do |options|
-    with_env(build_number_env(options)) do
-      sh(File.join(SCRIPTS_DIR, "package-release.sh"))
+    with_version(requested_version(options)) do
+      with_env(build_number_env(options)) do
+        sh(File.join(SCRIPTS_DIR, "package-release.sh"))
+      end
     end
     UI.success("App: #{File.join(RELEASE_DIR, 'Android Rapid Transfer.app')}")
   end
 
   desc "Release DMG in native/AndroidRapidTransfer/ci-artifacts: Developer ID signed,"
   desc "notarized and stapled, with the Sparkle appcast.xml, SHA256SUMS and build-info.txt"
-  desc "Options: adhoc:true (ad-hoc signed, no appcast), build_number"
+  desc "Options: adhoc:true (ad-hoc signed, no appcast), version, build_number"
   lane :dmg do |options|
     adhoc = options[:adhoc].to_s == "true"
+    version = requested_version(options)
     unless adhoc
       check_signing_credentials
-      sparkle_key = sparkle_private_key
+      sparkle_private_key # validated here; ci-build.sh reads SPARKLE_PRIVATE_KEY itself
     end
-    tag = "v#{app_version}"
-    variables = {
-      "ART_SIGNING" => adhoc ? "adhoc" : "auto",
-      "ART_REQUIRE_SIGNING" => adhoc ? "0" : "1",
-      "ART_CI_OUTPUT_DIR" => OUTPUT_DIR
-    }.merge(build_number_env(options))
-    # ci-build.sh appcast reads the key as SPARKLE_ED_PRIVATE_KEY, the CI secret's name.
-    variables["SPARKLE_ED_PRIVATE_KEY"] = sparkle_key unless adhoc
-    with_notary_key_file do
-      with_env(variables) do
-        sh(CI_BUILD, "package")
-        sh(CI_BUILD, "appcast", tag) unless adhoc
+    tag = nil
+    with_version(version) do |built_version|
+      tag = "v#{built_version}"
+      variables = {
+        "ART_SIGNING" => adhoc ? "adhoc" : "auto",
+        "ART_REQUIRE_SIGNING" => adhoc ? "0" : "1",
+        "ART_RELEASE_TAG" => tag,
+        "ART_CI_OUTPUT_DIR" => OUTPUT_DIR
+      }.merge(build_number_env(options))
+      with_notary_key_file do
+        with_env(variables) do
+          sh(CI_BUILD, "package")
+          sh(CI_BUILD, "appcast", tag) unless adhoc
+        end
       end
     end
 
     files = Dir[File.join(OUTPUT_DIR, "*.dmg")] +
             %w[appcast.xml SHA256SUMS build-info.txt].map { |name| File.join(OUTPUT_DIR, name) }
     files.select! { |path| File.exist?(path) }
-    UI.success("Built in #{OUTPUT_DIR}:")
+    UI.success("Built #{tag} in #{OUTPUT_DIR}:")
     files.each { |path| UI.message("  #{File.basename(path)}") }
     next if adhoc
 
     UI.message("To attach them to the release #{tag} by hand:")
     UI.message("  gh release upload #{tag} --clobber " + files.map { |path| %("#{path}") }.join(" "))
-    UI.important("appcast.xml belongs on the latest non-prerelease release.") if app_version.include?("-")
+    UI.important("appcast.xml belongs on the latest non-prerelease release.") if tag.include?("-")
   end
 end

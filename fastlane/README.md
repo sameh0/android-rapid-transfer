@@ -23,7 +23,7 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 Universal Android Rapid Transfer.app, ad-hoc signed, in native/AndroidRapidTransfer/release
 
-Options: build_number
+Options: version, build_number
 
 ### mac dmg
 
@@ -35,7 +35,7 @@ Release DMG in native/AndroidRapidTransfer/ci-artifacts: Developer ID signed,
 
 notarized and stapled, with the Sparkle appcast.xml, SHA256SUMS and build-info.txt
 
-Options: adhoc:true (ad-hoc signed, no appcast), build_number
+Options: adhoc:true (ad-hoc signed, no appcast), version, build_number
 
 ----
 
