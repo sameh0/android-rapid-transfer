@@ -75,6 +75,12 @@ sign_sparkle_framework "$FRAMEWORKS/Sparkle.framework" "$DEVELOPER_ID_APP" \
 "$SCRIPT_DIR/make-dmg.sh"
 DMG="$RELEASE_DIR/$APP_ARTIFACT_NAME-$APP_VERSION.dmg"
 
+# Gatekeeper assesses a downloaded DMG by its own signature (spctl --type open),
+# so the image is signed too, before notarization.
+echo "Developer ID signing the DMG..."
+/usr/bin/codesign --force --timestamp --sign "$DEVELOPER_ID_APP" "$DMG"
+/usr/bin/codesign --verify --strict --verbose=2 "$DMG"
+
 echo "Submitting $DMG to Apple's notary service..."
 /usr/bin/xcrun notarytool submit "$DMG" "${NOTARY_AUTH[@]}" --wait
 
