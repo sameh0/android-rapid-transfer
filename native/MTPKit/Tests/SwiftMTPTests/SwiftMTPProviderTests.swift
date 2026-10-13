@@ -26,8 +26,14 @@ final class SwiftMTPProviderTests: ProviderTestCase {
     func testFailedOpenIsRetriedByTheNextCall() async throws {
         let device = FakeMTPDevice()
         let (provider, factory) = makeProvider(device)
-        factory.failNextOpen = MTPTransportError(.exclusiveAccess, status: IOReturnCode.exclusiveAccess, "busy")
-        await assertThrowsCall(.deviceSetup) { try await provider.deviceInfo() }
+        factory.failNextOpen = MTPTransportError(.exclusiveAccess, status: IOReturnCode.exclusiveAccess,
+                                                 "busy: ptpcamerad (pid 19641) is using the phone")
+        // Still `.deviceSetup`, but the message keeps the transport's kind
+        // marker and the holder: that is how the app tells "another program
+        // has the phone" (retry, release) from "replug it".
+        await assertThrowsCall(.deviceSetup, contains: "ptpcamerad (pid 19641) is using the phone (exclusiveAccess") {
+            try await provider.deviceInfo()
+        }
         _ = try await provider.deviceInfo()
         XCTAssertEqual(factory.opens, 1)
     }

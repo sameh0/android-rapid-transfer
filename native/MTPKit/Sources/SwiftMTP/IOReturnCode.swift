@@ -10,6 +10,9 @@ public enum IOReturnCode {
     public static let busy: Int32 = Int32(bitPattern: 0xE000_02D5)
     public static let timeout: Int32 = Int32(bitPattern: 0xE000_02D6)
     public static let notPermitted: Int32 = Int32(bitPattern: 0xE000_02E2)
+    /// Seen from `IOUSBHostInterface`'s open of a Samsung phone's MTP
+    /// interface that macOS's Image Capture agent had just held.
+    public static let internalError: Int32 = Int32(bitPattern: 0xE000_02C9)
     public static let notPrivileged: Int32 = Int32(bitPattern: 0xE000_02C1)
     public static let aborted: Int32 = Int32(bitPattern: 0xE000_02EB)
     public static let notResponding: Int32 = Int32(bitPattern: 0xE000_02ED)
@@ -30,6 +33,7 @@ public enum IOReturnCode {
         case busy: return "kIOReturnBusy"
         case timeout: return "kIOReturnTimeout"
         case notPermitted: return "kIOReturnNotPermitted"
+        case internalError: return "kIOReturnInternalError"
         case notPrivileged: return "kIOReturnNotPrivileged"
         case aborted: return "kIOReturnAborted"
         case notResponding: return "kIOReturnNotResponding"

@@ -41,21 +41,25 @@ public final class IOUSBHostTransport: MTPTransport, @unchecked Sendable {
         return buffer
     }
 
-    /// Opens the interface. Retries a busy / exclusively-owned interface
-    /// after each delay in `retryDelays` (close, wait, reopen), never resetting.
+    /// Opens the interface. A taken interface (kIOReturnExclusiveAccess, or
+    /// any failure while the registry names a holder) and
+    /// kIOReturnInternalError are retried after each delay in `retryDelays`:
+    /// nothing is held between attempts, and the device is never reset. See
+    /// ``USBClaimRetry``.
+    ///
+    /// - Parameter holder: reads who holds the interface (by registry entry
+    ///   ID); injectable for tests.
     public static func open(_ candidate: MTPInterfaceCandidate,
                             retryDelays: [TimeInterval] = [0.25, 0.5, 1.0, 2.0],
-                            log: ((String) -> Void)? = nil) throws -> IOUSBHostTransport {
-        var attempt = 0
-        while true {
-            do {
-                return try IOUSBHostTransport(candidate: candidate)
-            } catch let error as MTPTransportError
-                where (error.kind == .exclusiveAccess) && attempt < retryDelays.count {
-                log?("open attempt \(attempt + 1) failed: \(error); retrying in \(retryDelays[attempt]) s (no reset)")
-                Thread.sleep(forTimeInterval: retryDelays[attempt])
-                attempt += 1
-            }
+                            log: ((String) -> Void)? = nil,
+                            holder: (UInt64) -> String? = USBDeviceDiscovery.claimHolder(ofInterface:))
+        throws -> IOUSBHostTransport {
+        try USBClaimRetry.run(retryDelays: retryDelays,
+                              retryableStatuses: [IOReturnCode.internalError],
+                              sleep: { Thread.sleep(forTimeInterval: $0) },
+                              log: log,
+                              owner: { holder(candidate.registryEntryID) }) {
+            try IOUSBHostTransport(candidate: candidate)
         }
     }
 

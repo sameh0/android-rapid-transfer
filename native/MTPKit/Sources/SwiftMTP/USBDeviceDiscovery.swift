@@ -125,6 +125,83 @@ public enum USBDeviceDiscovery {
         return service == 0 ? nil : service
     }
 
+    /// The I/O Registry property naming the process that created a user
+    /// client ("pid 19641, ptpcamerad"), the same form as `UsbExclusiveOwner`.
+    static let userClientCreatorKey = "IOUserClientCreator"
+
+    /// Who holds an interface, in `UsbExclusiveOwner` form, read from the
+    /// registry in this order: the interface's `UsbExclusiveOwner`, its USB
+    /// device's (a client may open the whole device), then the creator of a
+    /// user client attached to the interface or the device (an open that left
+    /// no `UsbExclusiveOwner`). Only the interface and its direct parent are
+    /// read, never hubs further up. A client of this process is named only
+    /// when nothing else is. Nil when the interface is gone or nobody holds it.
+    public static func claimHolder(ofInterface registryEntryID: UInt64) -> String? {
+        guard let service = service(for: registryEntryID) else { return nil }
+        defer { IOObjectRelease(service) }
+        var parent: io_registry_entry_t = 0
+        if IORegistryEntryGetParentEntry(service, kIOServicePlane, &parent) != KERN_SUCCESS { parent = 0 }
+        defer { if parent != 0 { IOObjectRelease(parent) } }
+        let entries = parent != 0 ? [service, parent] : [service]
+        for entry in entries {
+            if let value = stringProperty(entry, USBExclusiveOwner.registryKey) { return value }
+        }
+        // A device-level client of a program that uses another interface
+        // (the ADB server opens the device to claim the ADB interface) does
+        // not block the MTP interface, so it is not named.
+        let creators = userClientCreators(of: service)
+            + (parent != 0 ? userClientCreators(of: parent).filter { !otherInterfaceUsers.contains(processName($0)) } : [])
+        let me = ProcessInfo.processInfo.processIdentifier
+        return creators.first { USBExclusiveOwner(registryValue: $0)?.processID != me } ?? creators.first
+    }
+
+    /// Programs that open the phone for an interface other than MTP.
+    static let otherInterfaceUsers: Set<String> = ["adb"]
+
+    private static func processName(_ value: String) -> String {
+        if case let .process(_, name)? = USBExclusiveOwner(registryValue: value) { return name }
+        return value
+    }
+
+    /// Whether any USB device or interface still names process `pid` as its
+    /// `UsbExclusiveOwner`, or has a user client it created (the kernel
+    /// drops both once the process's opens are closed, which happens when it
+    /// exits).
+    public static func isClaimed(byProcess pid: Int32) -> Bool {
+        for serviceClass in ["IOUSBHostInterface", "IOUSBHostDevice"] {
+            var iterator: io_iterator_t = 0
+            guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(serviceClass), &iterator) == KERN_SUCCESS else {
+                continue
+            }
+            defer { IOObjectRelease(iterator) }
+            while case let service = IOIteratorNext(iterator), service != 0 {
+                defer { IOObjectRelease(service) }
+                let values = [stringProperty(service, USBExclusiveOwner.registryKey)] + userClientCreators(of: service)
+                if values.contains(where: { USBExclusiveOwner(registryValue: $0)?.processID == pid }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// `IOUserClientCreator` of each direct child of `entry` that has one.
+    private static func userClientCreators(of entry: io_registry_entry_t) -> [String] {
+        var iterator: io_iterator_t = 0
+        guard IORegistryEntryGetChildIterator(entry, kIOServicePlane, &iterator) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var creators: [String] = []
+        while case let child = IOIteratorNext(iterator), child != 0 {
+            defer { IOObjectRelease(child) }
+            if let creator = stringProperty(child, userClientCreatorKey) { creators.append(creator) }
+        }
+        return creators
+    }
+
+    private static func stringProperty(_ entry: io_registry_entry_t, _ key: String) -> String? {
+        IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? String
+    }
+
     static func describe(_ service: io_service_t) -> MTPInterfaceCandidate? {
         var entryID: UInt64 = 0
         IORegistryEntryGetRegistryEntryID(service, &entryID)

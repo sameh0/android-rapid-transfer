@@ -31,6 +31,12 @@ struct USBDeviceIdentity: Equatable, Sendable {
         }
     }
 
+    /// The name to show before the phone's MTP model is known: its USB
+    /// product string unless generic, else its maker (``DeviceFriendlyName``).
+    var friendlyName: String? {
+        DeviceFriendlyName.resolve(model: nil, productName: productName, vendorID: vendorID)
+    }
+
     func matches(_ other: USBDeviceIdentity) -> Bool {
         guard !positivelyIdentifiesDifferentDevice(from: other) else { return false }
 

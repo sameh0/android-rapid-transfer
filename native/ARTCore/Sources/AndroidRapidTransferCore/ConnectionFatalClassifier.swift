@@ -3,6 +3,12 @@ import MTPKit
 enum ConnectionFatalDisposition: Equatable, Sendable {
     case deviceUnavailable
     case requiresReplug
+    /// The phone could not be opened for a reason on the computer's side:
+    /// another program or driver holds its MTP interface, this user may not
+    /// open it (``DeviceAccessProblem``), or (macOS) the claim failed
+    /// otherwise (``InterfaceClaimFailure``). A replug is not the cure, so
+    /// the controller reports a retryable error that names the cause.
+    case accessBlocked
 }
 
 enum ConnectionFatalClassifier {
@@ -18,6 +24,15 @@ enum ConnectionFatalClassifier {
         case .deviceChanged, .mtpDetectFailed:
             return .deviceUnavailable
         case .deviceSetup:
+            // Claiming the interface is part of setup; when the transport says
+            // it was taken or refused, the cause is on this computer.
+            if DeviceAccessProblem(message: callError.message) != nil { return .accessBlocked }
+            #if os(macOS)
+            // Any other failed claim on macOS (kIOReturnInternalError was
+            // seen) is explained with its status and offered Retry: a replug
+            // demonstrably did not help. Linux keeps the replug screen.
+            if InterfaceClaimFailure(message: callError.message) != nil { return .accessBlocked }
+            #endif
             return .requiresReplug
         default:
             // A phone that drops off mid-operation surfaces as that

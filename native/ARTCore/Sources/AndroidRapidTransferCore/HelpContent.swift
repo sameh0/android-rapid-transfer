@@ -167,7 +167,8 @@ public enum HelpContent {
                     id: "image-capture",
                     title: String(localized: "Image Capture, Preview and Photos"),
                     paragraphs: [
-                        String(localized: "macOS can open these automatically for a connected phone. In Image Capture, select the phone and set “Connecting this device opens” to “No application”.")
+                        String(localized: "macOS can open these automatically for a connected phone. In Image Capture, select the phone and set “Connecting this device opens” to “No application”."),
+                        String(localized: "Even with no app open, Image Capture’s background service (ptpcamerad) can take Samsung phones, and other phones that offer photo import, as soon as they are plugged in. \(appName) then says so and offers Release the Phone, which stops the service and connects. macOS starts the service again when Image Capture or Photos needs it.")
                     ]
                 ),
                 HelpSection(

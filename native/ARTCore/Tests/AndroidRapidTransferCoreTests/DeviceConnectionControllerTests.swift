@@ -451,7 +451,9 @@ final class DeviceConnectionControllerTests: XCTestCase {
         guard case let .needsReplug(deviceName, message) = controller.state else {
             return XCTFail("Expected failed disposal to require a fresh device session")
         }
-        XCTAssertEqual(deviceName, "Pixel")
+        // The phone connected earlier as "Test Pixel" (its MTP model); the
+        // same serial is still called that rather than its USB product string.
+        XCTAssertEqual(deviceName, "Test Pixel")
         XCTAssertTrue(message?.contains("unsuccessful disposal result") == true)
         let creationCount = await factory.currentCreationCount()
         XCTAssertEqual(creationCount, 1)

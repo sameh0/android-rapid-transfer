@@ -102,12 +102,23 @@ struct DevicePaneView: View {
                 showConnectionHelp: showConnectionHelp
             )
         case let .failed(message, retryable):
-            DeviceConnectionErrorView(
-                message: message,
-                retryable: retryable,
-                retry: retry,
-                showConnectionHelp: showConnectionHelp
-            )
+            if let blocked = ConnectionBlockedPresentation(message: message) {
+                DeviceBlockedView(
+                    presentation: blocked,
+                    releaseFailure: controller.holderReleaseFailure,
+                    isReleasing: controller.isReleasingHolder,
+                    release: releaseHolder,
+                    retry: retry,
+                    showConnectionHelp: showConnectionHelp
+                )
+            } else {
+                DeviceConnectionErrorView(
+                    message: message,
+                    retryable: retryable,
+                    retry: retry,
+                    showConnectionHelp: showConnectionHelp
+                )
+            }
         }
     }
 
@@ -306,6 +317,10 @@ struct DevicePaneView: View {
 
     private func retry() {
         Task { await controller.retry() }
+    }
+
+    private func releaseHolder() {
+        Task { await controller.releaseHolderAndRetry() }
     }
 
     private func showConnectionHelp() {

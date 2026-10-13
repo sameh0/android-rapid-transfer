@@ -124,8 +124,12 @@ final class MTPProviderCore: @unchecked Sendable {
         do {
             opened = try configuration.openDevice()
         } catch let error as MTPCallError {
+            configuration.log?("open failed: \(error)")
             throw ProviderError.finalize(error)
         } catch let error as MTPTransportError {
+            // The transport error names the OS status and kind; a taken
+            // interface comes back as `.exclusiveAccess` naming its holder.
+            configuration.log?("could not open the MTP interface: \(error)")
             switch error.kind {
             case .noDevice:
                 throw ProviderError.call("no MTP devices found (\(error))", .mtpDetectFailed)
@@ -133,6 +137,7 @@ final class MTPProviderCore: @unchecked Sendable {
                 throw ProviderError.call("could not open the MTP interface: \(error)", .deviceSetup)
             }
         } catch {
+            configuration.log?("could not open the MTP interface: \(error)")
             throw ProviderError.call("could not open the MTP interface: \(error)", .deviceSetup)
         }
 
@@ -164,6 +169,7 @@ final class MTPProviderCore: @unchecked Sendable {
             }
         } catch {
             let broken = session.isBroken
+            configuration.log?("GetDeviceInfo failed: \(error)")
             session.close()
             if broken, (error as? MTPTransportError)?.kind == .noDevice {
                 throw ProviderError.deviceLost("GetDeviceInfo: \(error)")
@@ -179,6 +185,7 @@ final class MTPProviderCore: @unchecked Sendable {
         do {
             try session.openSession(id: configuration.makeSessionID())
         } catch {
+            configuration.log?("OpenSession failed: \(error)")
             session.close()
             // Surfaced as "replug required"; the device is never reset.
             throw ProviderError.call("OpenSession failed: \(ProviderError.text(error))", .deviceSetup)

@@ -26,7 +26,7 @@ public final class ConnectionControllerBugReportSession: BugReportDeviceSession 
     }
 
     public func deviceSummary() -> String {
-        BugReportDeviceSummary.describe(controller.state)
+        BugReportDeviceSummary.describe(controller.state, lastConnectionError: controller.lastConnectionError)
     }
 
     public func release() async -> Bool {
@@ -40,7 +40,18 @@ public final class ConnectionControllerBugReportSession: BugReportDeviceSession 
 }
 
 public enum BugReportDeviceSummary {
-    public static func describe(_ state: DeviceConnectionController.State) -> String {
+    /// - Parameter lastConnectionError: the controller's last connection
+    ///   failure in full; the screens show a friendlier text, and the replug
+    ///   screen none at all.
+    public static func describe(_ state: DeviceConnectionController.State, lastConnectionError: String? = nil) -> String {
+        var text = describeState(state)
+        if let lastConnectionError {
+            text += "Last connection error: \(lastConnectionError)\n"
+        }
+        return text
+    }
+
+    private static func describeState(_ state: DeviceConnectionController.State) -> String {
         switch state {
         case let .connected(deviceInfo, storages):
             var text = "State: connected\n\n===== Device =====\n"
