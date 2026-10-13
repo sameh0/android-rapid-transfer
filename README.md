@@ -61,7 +61,7 @@ interface (see [Linux](#linux)).
   them; breadcrumbs, back and up work the way Finder does.
 - **Copy either way in one click.** Select files and click **Copy to Phone** or
   **Copy to Computer**, drag them to and from Finder, or collect files from
-  several folders with **Copy to Queue** and paste them where they belong.
+  several folders with **Add to Copy Queue** and paste them where they belong.
 - **Live progress you can trust.** Every copy shows files done, bytes, speed and
   time left, puts overall progress in the Dock, and ends with a small
   celebration. It keeps running in the background and posts a notification when
@@ -70,6 +70,9 @@ interface (see [Linux](#linux)).
   large file, and leaves no half-written files on either side. Interrupted
   copies can be resumed; name clashes can be replaced, skipped or kept side by
   side.
+- **Manage files on both sides.** Create folders, rename, delete (to the Trash
+  on the Mac; permanently on the phone, after asking), see file info and show
+  hidden files.
 - **Copy by date range.** Pick a range and copy just the photos and videos from
   it, with a live preview while the phone is scanned.
 - **Knows when you plug in.** The phone is picked up as soon as it's connected,
@@ -131,7 +134,8 @@ copy, preferences, help and the bug report.
 
 **Requirements:** a 64-bit Linux with glibc 2.43 or later, GTK 4.12 or later and
 libadwaita 1.6 or later: for example Ubuntu 26.04, Fedora 44 or Arch. Packages are
-built for x86_64 and aarch64 (aarch64 hasn't been tested yet).
+built for x86_64 and aarch64 (aarch64 is built and tested in CI but hasn't
+been tried with a real phone yet).
 
 ## Speed
 
@@ -156,14 +160,16 @@ uses the app's built-in demo phone, whose copies run at about the measured speed
 
 ## Install
 
-1. Download the latest `Android-Rapid-Transfer-<version>.dmg` from
+1. Download the latest `Android-Rapid-Transfer-<version>.dmg` (or
+   `…-adhoc.dmg` for a build that isn't notarized) from
    [GitHub Releases](https://github.com/sameh0/android-rapid-transfer/releases).
 2. Open it and drag **Android Rapid Transfer** to **Applications**.
 3. Open the app. On first launch it walks you through connecting your phone.
 
-If macOS says the app can't be checked for malicious software, Control-click (or
-right-click) it in Applications, choose **Open**, and confirm. Builds that aren't
-yet notarized need this once.
+If macOS says the app can't be checked for malicious software (builds that aren't
+notarized need this once): on macOS 15 or later, try to open it, then click
+**Open Anyway** in **System Settings › Privacy & Security**. On macOS 14,
+Control-click (or right-click) it in Applications, choose **Open**, and confirm.
 
 **Homebrew** *(coming soon)*: `brew install --cask android-rapid-transfer`.
 
@@ -181,7 +187,8 @@ Each release carries a `.deb`, an `.rpm`, an AppImage and a tarball:
   tarball and run its `install.sh` (installs into `~/.local`; `--uninstall`
   removes it).
 
-Then start **Android Rapid Transfer** from the app launcher. The packages are
+Then start **Android Rapid Transfer** from the app launcher (an AppImage runs
+from wherever you put it). The packages are
 built by `native/AndroidRapidTransferLinux/Scripts/linux-package.sh`.
 
 ## Connect your phone
@@ -260,9 +267,10 @@ the phone open; the app explains how to stop it for now.
 <summary><strong>Linux: "Linux isn't letting Android Rapid Transfer open the phone"</strong></summary>
 
 systemd desktops give the logged-in user access to modern phones automatically.
-Some older phones, or sessions without a seat (over SSH, for example), need a udev
-rule. The .deb and .rpm install it; with the tarball, run
-`sudo ./install.sh --udev-rule`. Then unplug the phone and plug it back in.
+Some older phones need a udev rule. The .deb and .rpm install it; with the
+tarball, run `sudo ./install.sh --udev-rule --prefix ~/.local` (the prefix you
+installed to). Then unplug the phone and plug it back in. Over SSH, or in a
+container without USB access, the app can't open the phone.
 </details>
 
 <details>
@@ -270,7 +278,7 @@ rule. The .deb and .rpm install it; with the tarball, run
 
 Copies stream in chunks with live progress, can be stopped at any point without
 leaving partial files behind, and interrupted copies can be resumed from
-**File › Resume Copies…**. Single files larger than 4 GB haven't been tested on a
+**File › Resume Copies…** (on Linux, in the main menu). Single files larger than 4 GB haven't been tested on a
 real phone yet; if you try one, please report how it went.
 </details>
 
@@ -283,15 +291,15 @@ The one thing that reaches the network on its own is the update check: the app
 uses [Sparkle](https://sparkle-project.org) to read an update feed published with
 the project's GitHub Releases. You can turn automatic checks off in **Settings ›
 General**. A bug report is only created when you ask for one (**Help › Report a
-Bug…**); it is saved to your Desktop, lists what it contains first, and is never
-uploaded for you. The full statement is in the app under **Help › Privacy**.
+Bug…**); on the Mac it is saved to your Desktop, on Linux you choose where. It
+lists what it contains first and is never uploaded for you. The full statement is in the app under **Help › Privacy**.
 
 The Linux app has no update check at all: your package manager, or a new AppImage,
 updates it.
 
 ## Build from source
 
-You need Xcode 16 or later. If `xcode-select -p` points at the Command Line Tools
+You need Xcode 16 or later (CI builds with the newest Xcode). If `xcode-select -p` points at the Command Line Tools
 rather than Xcode, SwiftUI's macros won't expand and the build fails on the first
 `@State`, so point the tools at Xcode for these commands:
 
@@ -317,11 +325,19 @@ A first build takes a few minutes. The app icon is drawn in code
 `Scripts/ci-build.sh test` and `Scripts/ci-build.sh package` run exactly what
 GitHub Actions runs, the latter producing the universal DMG in `ci-artifacts/`.
 
+Local release builds go through [fastlane](https://fastlane.tools), which runs
+the same scripts. From the repository root, `bundle install` once, then
+`bundle exec fastlane mac app` (the universal app, ad-hoc signed, in `release/`)
+or `bundle exec fastlane mac dmg adhoc:true` (the DMG in `ci-artifacts/`;
+without `adhoc:true` it needs Developer ID and notarization credentials). Add
+`version:1.2.0` to build that version.
+
 ### On Linux
 
-You need Swift 6.3 and the GTK 4 and libadwaita development packages
-(`libgtk-4-dev libadwaita-1-dev` on Debian and Ubuntu, `gtk4-devel libadwaita-devel`
-on Fedora, `gtk4 libadwaita` on Arch):
+You need Swift 6.3 (6.4 can't build the statically linked release binary) and
+the development packages for GTK 4.12 or later and libadwaita 1.6 or later
+(`libgtk-4-dev libadwaita-1-dev` on Debian and Ubuntu 26.04 or later,
+`gtk4-devel libadwaita-devel` on Fedora, `gtk4 libadwaita` on Arch):
 
 ```shell
 cd native/AndroidRapidTransferLinux
@@ -360,7 +376,7 @@ android-rapid-transfer       GTK 4 + libadwaita app for Linux, over a thin Swift
 
 - **SwiftMTP** speaks MTP directly to the phone's USB interface through Apple's
   IOUSBHost framework: no libusb, no drivers, no helper processes. A release
-  bundle contains only the app, Apple's frameworks and Sparkle. On Linux the same
+  bundle contains only the app's executable and Sparkle.framework. On Linux the same
   engine uses the kernel's usbfs interface directly, again without libusb.
 - **AndroidRapidTransferCore** owns the connection lifecycle (hotplug, automatic
   reconnects, release on quit) and a serial transfer queue that reports progress,
@@ -376,6 +392,8 @@ android-rapid-transfer       GTK 4 + libadwaita app for Linux, over a thin Swift
 | `native/ARTCore` | the core library `AndroidRapidTransferCore`, its tests, and the device probes |
 | `native/AndroidRapidTransferLinux` | the Linux app, its GTK layer `ARTGtk`, and the Linux packaging |
 | `native/MTPKit` | the MTP layer: `MTPKit`, `SwiftMTP` and `USBWatcher` |
+| `fastlane`, `Gemfile` | local release builds (app and DMG) |
+| `.github/workflows` | CI and release builds |
 | `docs/media` | the demo video and screenshots on this page |
 
 ## Contributing
@@ -388,8 +406,9 @@ Bug reports, device reports and pull requests are welcome.
   to attach it to.
 - **Tried it with your phone?** An issue saying which phone, what worked and how
   fast it was helps a lot: the app has been measured on only a few devices so far.
-- **Sending a change?** Keep `swift build` and `swift test` green in every package,
-  and try it against `--mock` (and a real phone, if the change touches the USB or
+- **Sending a change?** Run `native/AndroidRapidTransfer/Scripts/ci-build.sh test`
+  on a Mac (or `native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh test`
+  on Linux) first: CI treats compiler warnings as errors. Try it against `--mock` (and a real phone, if the change touches the USB or
   transfer path).
 
 ## License
