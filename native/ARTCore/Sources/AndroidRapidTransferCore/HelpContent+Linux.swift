@@ -16,15 +16,10 @@ extension HelpContent {
         ]
     }
 
-    /// The udev rule that gives the logged-in user access to Android phones
-    /// in MTP mode, for systems where the desktop's own rules do not.
-    public static let linuxUdevRule =
-        #"SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*:060101:*", TAG+="uaccess""#
-
-    /// A shell command that installs ``linuxUdevRule`` and reloads udev.
+    /// A shell command that installs the packaged udev rules
+    /// (``LinuxUdevRules``) and reloads udev.
     public static var linuxUdevInstallCommand: String {
-        "echo '\(linuxUdevRule)' | sudo tee /etc/udev/rules.d/70-android-mtp.rules"
-            + " && sudo udevadm control --reload && sudo udevadm trigger"
+        LinuxUdevRules.installCommand
     }
 
     private static func linuxNotDetected(appName: String) -> HelpTopic {
@@ -202,7 +197,7 @@ extension HelpContent {
                     id: "install-rule",
                     title: String(localized: "Allow access to phones"),
                     paragraphs: [
-                        String(localized: "Run this command in a terminal. It asks for your password, adds one udev rule and reloads udev:"),
+                        String(localized: "Run this command in a terminal. It asks for your password, installs the udev rules the app's packages use, and reloads udev:"),
                         linuxUdevInstallCommand
                     ],
                     steps: [
