@@ -1,7 +1,7 @@
 # Local macOS builds. The lanes drive the scripts CI runs
 # (native/AndroidRapidTransfer/Scripts/ci-build.sh), so a local DMG is built,
 # signed, notarized and checked exactly like a CI one. They never commit, tag,
-# push or touch a GitHub release: a v* tag makes release.yml build the draft
+# push or touch a GitHub release: a release tag (1.2.3) makes release.yml build the draft
 # release, and a local DMG is uploaded to a release by hand.
 #
 #   bundle exec fastlane mac app             universal app, ad-hoc signed
@@ -11,7 +11,7 @@
 #
 # Output: native/AndroidRapidTransfer/release/ (app) and
 # native/AndroidRapidTransfer/ci-artifacts/ (DMG, appcast.xml, SHA256SUMS,
-# build-info.txt). The version is version:X, else the v<version> tag on HEAD,
+# build-info.txt). The version is version:X, else the release tag on HEAD,
 # else AppVersion.current; like a CI tag build, the lane writes it into
 # AppVersion.swift for the build and restores the file afterwards. The build
 # number is build_number:N, else BUILD_NUMBER, else the commit count of HEAD. A CI tag
@@ -52,18 +52,18 @@ end
 VERSION_FORMAT = /\A\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?\z/
 VERSION_LINE = /^(\s*public static let current = ")[^"]+(")/
 
-# version:X, else the release tag on HEAD (v1.2.3 or v1.2.3-beta.1), else nil.
+# version:X, else the release tag on HEAD (1.2.3 or 1.2.3-beta.1), else nil.
 def requested_version(options)
-  version = options[:version].to_s.delete_prefix("v")
+  version = options[:version].to_s
   if version.empty?
-    tags, = Open3.capture2("git", "-C", REPO_ROOT, "tag", "--points-at", "HEAD", "--list", "v*")
-    # Several (v1.0.0-beta.3 and v1.0.0 on one commit): the highest, a release
+    tags, = Open3.capture2("git", "-C", REPO_ROOT, "tag", "--points-at", "HEAD")
+    # Several (1.0.0-beta.3 and 1.0.0 on one commit): the highest, a release
     # above its prereleases.
-    version = tags.split.map { |tag| tag.delete_prefix("v") }.grep(VERSION_FORMAT)
+    version = tags.split.grep(VERSION_FORMAT)
                   .max_by { |candidate| Gem::Version.new(candidate) }.to_s
     return nil if version.empty?
 
-    UI.message("Version #{version}, from tag v#{version} on HEAD")
+    UI.message("Version #{version}, from tag #{version} on HEAD")
   end
   UI.user_error!("'#{version}' is not a version like 1.2.3 or 1.2.3-beta.1") unless version.match?(VERSION_FORMAT)
   version
@@ -180,7 +180,7 @@ platform :mac do
     end
     tag = nil
     with_version(version) do |built_version|
-      tag = "v#{built_version}"
+      tag = built_version
       variables = {
         "ART_SIGNING" => adhoc ? "adhoc" : "auto",
         "ART_REQUIRE_SIGNING" => adhoc ? "0" : "1",

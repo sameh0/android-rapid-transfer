@@ -30,7 +30,7 @@
 # NOTARY_API_ISSUER_ID (Scripts/notarize.sh reads the same variables).
 #   ART_SIGNING=auto|adhoc   adhoc ignores any credentials (default auto)
 #   ART_REQUIRE_SIGNING=1    fail instead of falling back to ad-hoc
-#   ART_RELEASE_TAG=v1.2.3   build that version: AppVersion.current is set from the
+#   ART_RELEASE_TAG=1.2.3    build that version: AppVersion.current is set from the
 #                            tag (see stamp_version_from_tag)
 #   BUILD_NUMBER             CFBundleVersion (see resolve_build_number)
 
@@ -79,15 +79,15 @@ app_version() {
     echo "$version"
 }
 
-# ART_RELEASE_TAG=v<version> sets the version: AppVersion.current is rewritten
+# ART_RELEASE_TAG=<version> (the release tag, e.g. 1.2.3) sets the version: AppVersion.current is rewritten
 # to it before anything reads or builds it, so the app, its package and every
 # artifact carry the tag's version without a version commit. The checkout is
 # left with that change (a CI checkout is thrown away; fastlane restores it).
 stamp_version_from_tag() {
     local tag=${ART_RELEASE_TAG:-} version
     [[ -n "$tag" ]] || return 0
-    [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?)$ ]] \
-        || fail "ART_RELEASE_TAG must look like v1.2.3 or v1.2.3-beta.1; got '$tag'"
+    [[ "$tag" =~ ^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?)$ ]] \
+        || fail "ART_RELEASE_TAG must look like 1.2.3 or 1.2.3-beta.1 (no v prefix); got '$tag'"
     version=${BASH_REMATCH[1]}
     if [[ "$(app_version)" != "$version" ]]; then
         sed -i.bak -E "s/^([[:space:]]*public static let current = \")[^\"]+(\")/\\1$version\\2/" "$APP_VERSION_FILE"
