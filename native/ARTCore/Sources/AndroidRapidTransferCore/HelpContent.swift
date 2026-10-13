@@ -138,7 +138,8 @@ public enum HelpContent {
                     id: "why",
                     title: String(localized: "Why other apps matter"),
                     paragraphs: [
-                        String(localized: "MTP lets only one app use a phone at a time. The apps below can open automatically when a phone is connected and take it before \(appName) does.")
+                        String(localized: "MTP lets only one app use a phone at a time. The apps below can open automatically when a phone is connected and take it before \(appName) does."),
+                        String(localized: "The top of this window lists the ones that are running right now, with a button to quit each.")
                     ]
                 ),
                 HelpSection(

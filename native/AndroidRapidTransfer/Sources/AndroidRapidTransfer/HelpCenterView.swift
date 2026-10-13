@@ -1,40 +1,68 @@
 import AndroidRapidTransferCore
 import SwiftUI
 
-/// Troubleshooting & FAQ: expandable topic cards, the first one open.
+/// Troubleshooting & FAQ: the running apps that block the connection, then
+/// expandable topic cards, the first one open.
 struct HelpCenterView: View {
+    /// The topic that explains the apps listed in ``ConflictingAppsCard``.
+    static let conflictingAppsTopicID = "interfering-apps"
+
     @Environment(\.openWindow) private var openWindow
     @State private var expandedTopicIDs: Set<String>
+    @State private var conflictingApps: ConflictingAppsModel
     private let topics: [HelpTopic]
 
-    init(topics: [HelpTopic] = HelpContent.topics()) {
+    init(topics: [HelpTopic] = HelpContent.topics(), conflictingApps: ConflictingAppsModel? = nil) {
         self.topics = topics
         _expandedTopicIDs = State(initialValue: Set(topics.prefix(1).map(\.id)))
+        _conflictingApps = State(
+            initialValue: conflictingApps ?? ConflictingAppsModel(provider: WorkspaceRunningApplications())
+        )
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                SecondaryWindowHeader(
-                    title: "Troubleshooting & FAQ",
-                    subtitle: "Fixes for the problems people run into most, starting with the most common.",
-                    systemImage: "lifepreserver.fill"
-                )
-                .padding(.bottom, 8)
-                ForEach(Array(topics.enumerated()), id: \.element.id) { index, topic in
-                    HelpTopicCard(
-                        topic: topic,
-                        isExpanded: expandedTopicIDs.contains(topic.id),
-                        toggle: { toggle(topic.id) }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    SecondaryWindowHeader(
+                        title: "Troubleshooting & FAQ",
+                        subtitle: "Fixes for the problems people run into most, starting with the most common.",
+                        systemImage: "lifepreserver.fill"
                     )
-                    .staggeredAppearance(index: index + 1)
+                    .padding(.bottom, 8)
+                    ConflictingAppsCard(model: conflictingApps, showDetails: showDetailsAction(proxy))
+                        .padding(.bottom, 4)
+                        .staggeredAppearance(index: 1)
+                    ForEach(Array(topics.enumerated()), id: \.element.id) { index, topic in
+                        HelpTopicCard(
+                            topic: topic,
+                            isExpanded: expandedTopicIDs.contains(topic.id),
+                            toggle: { toggle(topic.id) }
+                        )
+                        .id(topic.id)
+                        .staggeredAppearance(index: index + 2)
+                    }
+                    stillStuck
+                        .padding(.top, 8)
+                        .staggeredAppearance(index: topics.count + 2)
                 }
-                stillStuck
-                    .padding(.top, 8)
-                    .staggeredAppearance(index: topics.count + 1)
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onAppear { conflictingApps.start() }
+        .onDisappear { conflictingApps.stop() }
+    }
+
+    /// Opens and scrolls to the topic about these apps, when the window has it.
+    private func showDetailsAction(_ proxy: ScrollViewProxy) -> (() -> Void)? {
+        let id = Self.conflictingAppsTopicID
+        guard topics.contains(where: { $0.id == id }) else { return nil }
+        return {
+            withMotion(Motion.snappy) {
+                expandedTopicIDs.insert(id)
+                proxy.scrollTo(id, anchor: .top)
+            }
         }
     }
 
