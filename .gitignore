@@ -20,3 +20,10 @@ xcuserdata/
 # Claude Code local state
 .claude/settings.local.json
 .claude/worktrees/
+
+# fastlane and Bundler (gems install into vendor/bundle)
+/.bundle/
+/vendor/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output/

@@ -1,0 +1,160 @@
+# Local macOS builds. The lanes drive the scripts CI runs
+# (native/AndroidRapidTransfer/Scripts/ci-build.sh), so a local DMG is built,
+# signed, notarized and checked exactly like a CI one. They never commit, tag,
+# push or touch a GitHub release: a v* tag makes release.yml build the draft
+# release, and a local DMG is uploaded to a release by hand.
+#
+#   bundle exec fastlane mac app             universal app, ad-hoc signed
+#   bundle exec fastlane mac dmg             Developer ID signed, notarized DMG + appcast
+#   bundle exec fastlane mac dmg adhoc:true  ad-hoc signed DMG, no credentials needed
+#
+# Output: native/AndroidRapidTransfer/release/ (app) and
+# native/AndroidRapidTransfer/ci-artifacts/ (DMG, appcast.xml, SHA256SUMS,
+# build-info.txt). The version is AppVersion.current; the build number is
+# build_number:N, else BUILD_NUMBER, else the commit count of HEAD. A CI tag
+# build counts public commits, so pass the public count when a local DMG must
+# order correctly in Sparkle with CI releases.
+#
+# Signing credentials come from the environment or fastlane/.env (ignored by
+# git):
+#   DEVELOPER_ID_APP   "Developer ID Application: Name (TEAMID)", in the keychain
+#   APPLE_ID, TEAM_ID, APP_PASSWORD                                  notarization
+#   or NOTARY_API_KEY_PATH, NOTARY_API_KEY_ID, NOTARY_API_ISSUER_ID  (API key)
+#   NOTARY_API_KEY_P8_BASE64   the .p8 itself (base64 -i AuthKey_X.p8), in place
+#                              of NOTARY_API_KEY_PATH, as the CI secret is named
+#   SPARKLE_ED_PRIVATE_KEY   optional; otherwise exported from the login keychain
+
+require "base64"
+require "open3"
+require "tmpdir"
+
+default_platform(:mac)
+
+REPO_ROOT = File.expand_path("..", __dir__)
+PROJECT_DIR = File.join(REPO_ROOT, "native/AndroidRapidTransfer")
+SCRIPTS_DIR = File.join(PROJECT_DIR, "Scripts")
+CI_BUILD = File.join(SCRIPTS_DIR, "ci-build.sh")
+RELEASE_DIR = File.join(PROJECT_DIR, "release")
+OUTPUT_DIR = File.join(PROJECT_DIR, "ci-artifacts")
+APP_VERSION_FILE = File.join(REPO_ROOT, "native/ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift")
+GENERATE_KEYS = File.join(PROJECT_DIR, ".build/artifacts/sparkle/Sparkle/bin/generate_keys")
+XCODE_DEVELOPER_DIR = "/Applications/Xcode.app/Contents/Developer"
+
+def app_version
+  File.read(APP_VERSION_FILE)[/public static let current = "([^"]+)"/, 1] \
+    || UI.user_error!("No AppVersion.current in #{APP_VERSION_FILE}")
+end
+
+def with_env(variables)
+  saved = variables.keys.to_h { |key| [key, ENV[key]] }
+  variables.each { |key, value| ENV[key] = value }
+  yield
+ensure
+  saved.each { |key, value| ENV[key] = value }
+end
+
+def build_number_env(options)
+  options[:build_number] ? { "BUILD_NUMBER" => options[:build_number].to_s } : {}
+end
+
+# Fails before the long build when the result could not be signed.
+def check_signing_credentials
+  identity = ENV["DEVELOPER_ID_APP"].to_s
+  UI.user_error!("Set DEVELOPER_ID_APP (in fastlane/.env or the environment), or pass adhoc:true") \
+    if identity.empty?
+  identities, = Open3.capture2("/usr/bin/security", "find-identity", "-v", "-p", "codesigning")
+  UI.user_error!("No codesigning identity '#{identity}' in the keychain") \
+    unless identities.include?(%("#{identity}"))
+  api_key = %w[NOTARY_API_KEY_ID NOTARY_API_ISSUER_ID]
+  apple_id = %w[APPLE_ID TEAM_ID APP_PASSWORD]
+  complete = ->(names) { names.all? { |name| !ENV[name].to_s.empty? } }
+  key_file = complete.(["NOTARY_API_KEY_PATH"]) || complete.(["NOTARY_API_KEY_P8_BASE64"])
+  return if (key_file && complete.(api_key)) || complete.(apple_id)
+
+  UI.user_error!("Notarization needs #{apple_id.join(', ')}, or NOTARY_API_KEY_PATH " \
+                 "(or NOTARY_API_KEY_P8_BASE64) with #{api_key.join(', ')}")
+end
+
+# notarytool reads the API key only from a file. With NOTARY_API_KEY_P8_BASE64
+# and no NOTARY_API_KEY_PATH, the key is written to a private temporary file for
+# the block and deleted afterwards, also when the build fails.
+def with_notary_key_file(&block)
+  encoded = ENV["NOTARY_API_KEY_P8_BASE64"].to_s
+  return yield if encoded.empty? || !ENV["NOTARY_API_KEY_PATH"].to_s.empty?
+
+  key = encoded.include?("BEGIN PRIVATE KEY") ? encoded : Base64.decode64(encoded.gsub(/\s/, ""))
+  UI.user_error!("NOTARY_API_KEY_P8_BASE64 does not decode to a .p8 private key") \
+    unless key.include?("BEGIN PRIVATE KEY")
+  Dir.mktmpdir("art-notary") do |dir|
+    path = File.join(dir, "AuthKey.p8")
+    File.write(path, key, perm: 0o600)
+    with_env("NOTARY_API_KEY_PATH" => path, &block)
+  end
+end
+
+# ci-build.sh appcast signs with SPARKLE_ED_PRIVATE_KEY. Without it, the key is
+# exported from the login keychain into this process only.
+def load_sparkle_key
+  return unless ENV["SPARKLE_ED_PRIVATE_KEY"].to_s.empty?
+
+  UI.user_error!("Missing #{GENERATE_KEYS}; run swift build in #{PROJECT_DIR} first") \
+    unless File.executable?(GENERATE_KEYS)
+  Dir.mktmpdir("art-sparkle") do |dir|
+    file = File.join(dir, "key")
+    UI.message("Exporting the Sparkle key from the login keychain (macOS may ask to allow it)")
+    _, status = Open3.capture2(GENERATE_KEYS, "-x", file)
+    UI.user_error!("generate_keys -x failed; is the Sparkle key in the login keychain?") unless status.success?
+    ENV["SPARKLE_ED_PRIVATE_KEY"] = File.read(file).strip
+  end
+  UI.user_error!("The exported Sparkle key is empty") if ENV["SPARKLE_ED_PRIVATE_KEY"].empty?
+end
+
+platform :mac do
+  before_all do
+    # Command Line Tools lack the SwiftUI macros; the build needs full Xcode.
+    ENV["DEVELOPER_DIR"] ||= XCODE_DEVELOPER_DIR if File.directory?(XCODE_DEVELOPER_DIR)
+  end
+
+  desc "Universal Android Rapid Transfer.app, ad-hoc signed, in native/AndroidRapidTransfer/release"
+  desc "Options: build_number"
+  lane :app do |options|
+    with_env(build_number_env(options)) do
+      sh(File.join(SCRIPTS_DIR, "package-release.sh"))
+    end
+    UI.success("App: #{File.join(RELEASE_DIR, 'Android Rapid Transfer.app')}")
+  end
+
+  desc "Release DMG in native/AndroidRapidTransfer/ci-artifacts: Developer ID signed,"
+  desc "notarized and stapled, with the Sparkle appcast.xml, SHA256SUMS and build-info.txt"
+  desc "Options: adhoc:true (ad-hoc signed, no appcast), build_number"
+  lane :dmg do |options|
+    adhoc = options[:adhoc].to_s == "true"
+    unless adhoc
+      check_signing_credentials
+      load_sparkle_key
+    end
+    tag = "v#{app_version}"
+    variables = {
+      "ART_SIGNING" => adhoc ? "adhoc" : "auto",
+      "ART_REQUIRE_SIGNING" => adhoc ? "0" : "1",
+      "ART_CI_OUTPUT_DIR" => OUTPUT_DIR
+    }.merge(build_number_env(options))
+    with_notary_key_file do
+      with_env(variables) do
+        sh(CI_BUILD, "package")
+        sh(CI_BUILD, "appcast", tag) unless adhoc
+      end
+    end
+
+    files = Dir[File.join(OUTPUT_DIR, "*.dmg")] +
+            %w[appcast.xml SHA256SUMS build-info.txt].map { |name| File.join(OUTPUT_DIR, name) }
+    files.select! { |path| File.exist?(path) }
+    UI.success("Built in #{OUTPUT_DIR}:")
+    files.each { |path| UI.message("  #{File.basename(path)}") }
+    next if adhoc
+
+    UI.message("To attach them to the release #{tag} by hand:")
+    UI.message("  gh release upload #{tag} --clobber " + files.map { |path| %("#{path}") }.join(" "))
+    UI.important("appcast.xml belongs on the latest non-prerelease release.") if app_version.include?("-")
+  end
+end

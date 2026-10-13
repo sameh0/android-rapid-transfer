@@ -131,9 +131,11 @@ public struct StoredZipArchiver: BugReportArchiving {
     static func dosTimestamp(_ date: Date) -> (time: UInt16, date: UInt16) {
         let calendar = Calendar(identifier: .gregorian)
         let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        let year = max(1980, min(2107, parts.year ?? 1980))
-        let time = UInt16((parts.hour ?? 0) << 11 | (parts.minute ?? 0) << 5 | (parts.second ?? 0) / 2)
-        let day = UInt16((year - 1980) << 9 | (parts.month ?? 1) << 5 | (parts.day ?? 1))
+        let year: Int = max(1980, min(2107, parts.year ?? 1980))
+        let hour: Int = parts.hour ?? 0, minute: Int = parts.minute ?? 0, second: Int = parts.second ?? 0
+        let month: Int = parts.month ?? 1, dayOfMonth: Int = parts.day ?? 1
+        let time = UInt16(hour << 11 | minute << 5 | second / 2)
+        let day = UInt16((year - 1980) << 9 | month << 5 | dayOfMonth)
         return (time, day)
     }
 

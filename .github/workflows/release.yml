@@ -209,6 +209,15 @@ jobs:
               echo "::error::Release $TAG is already published; refusing to change it."
               exit 1
             fi
+            # A Developer ID DMG built locally (`fastlane mac dmg`) and uploaded
+            # by hand must not be replaced by an ad-hoc build.
+            dmg=(*.dmg)
+            existing_assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+            if [[ "$SIGNING" != developer-id ]] \
+              && grep -Fxq "${dmg[0]/%-adhoc.dmg/.dmg}" <<<"$existing_assets"; then
+              echo "::notice::Draft $TAG already holds a Developer ID DMG; leaving its macOS assets as they are."
+              exit 0
+            fi
             echo "Updating the existing draft release $TAG."
             gh release edit "$TAG" --notes-file release-notes.md
             gh release upload "$TAG" "${assets[@]}" --clobber

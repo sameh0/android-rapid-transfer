@@ -116,10 +116,12 @@ final class HelpMenuTests: XCTestCase {
 
 final class HelpContentTests: XCTestCase {
     private func allText(appName: String) -> [String] {
-        HelpContent.topics(appName: appName)
-            .flatMap { [$0.title, $0.summary] + $0.sections.flatMap { [$0.title] + $0.paragraphs + $0.steps } }
-            + HelpContent.connectionSteps(appName: appName)
-            + PrivacyContent.sections(appName: appName).flatMap { [$0.title] + $0.paragraphs }
+        let topics: [String] = HelpContent.topics(appName: appName).flatMap { topic -> [String] in
+            let sections: [String] = topic.sections.flatMap { [$0.title] + $0.paragraphs + $0.steps }
+            return [topic.title, topic.summary] + sections
+        }
+        let privacy: [String] = PrivacyContent.sections(appName: appName).flatMap { [$0.title] + $0.paragraphs }
+        return topics + HelpContent.connectionSteps(appName: appName) + privacy
     }
 
     func testAppNameIsInterpolatedNotHardcoded() {

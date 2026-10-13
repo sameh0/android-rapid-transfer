@@ -1,0 +1,2 @@
+# Release lanes read their credentials from the environment; see Fastfile.
+app_identifier("com.sameh.AndroidRapidTransfer")
