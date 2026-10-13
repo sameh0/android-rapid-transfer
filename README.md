@@ -160,16 +160,12 @@ uses the app's built-in demo phone, whose copies run at about the measured speed
 
 ## Install
 
-1. Download the latest `Android-Rapid-Transfer-<version>.dmg` (or
-   `…-adhoc.dmg` for a build that isn't notarized) from
+1. Download the latest `Android-Rapid-Transfer-<version>.dmg` from
    [GitHub Releases](https://github.com/sameh0/android-rapid-transfer/releases).
 2. Open it and drag **Android Rapid Transfer** to **Applications**.
 3. Open the app. On first launch it walks you through connecting your phone.
 
-If macOS says the app can't be checked for malicious software (builds that aren't
-notarized need this once): on macOS 15 or later, try to open it, then click
-**Open Anyway** in **System Settings › Privacy & Security**. On macOS 14,
-Control-click (or right-click) it in Applications, choose **Open**, and confirm.
+Releases are signed with a Developer ID and notarized by Apple.
 
 **Homebrew** *(coming soon)*: `brew install --cask android-rapid-transfer`.
 
