@@ -22,10 +22,12 @@
 #   or NOTARY_API_KEY_PATH, NOTARY_API_KEY_ID, NOTARY_API_ISSUER_ID  (API key)
 #   NOTARY_API_KEY_P8_BASE64   the .p8 itself (base64 -i AuthKey_X.p8), in place
 #                              of NOTARY_API_KEY_PATH, as the CI secret is named
-#   SPARKLE_ED_PRIVATE_KEY   optional; otherwise exported from the login keychain
+#   SPARKLE_PRIVATE_KEY   the Sparkle EdDSA private key (generate_keys -x); it must
+#                         match SPARKLE_PUBLIC_ED_KEY in Scripts/release-config.sh
 
 require "base64"
 require "open3"
+require "openssl"
 require "tmpdir"
 
 default_platform(:mac)
@@ -37,7 +39,6 @@ CI_BUILD = File.join(SCRIPTS_DIR, "ci-build.sh")
 RELEASE_DIR = File.join(PROJECT_DIR, "release")
 OUTPUT_DIR = File.join(PROJECT_DIR, "ci-artifacts")
 APP_VERSION_FILE = File.join(REPO_ROOT, "native/ARTCore/Sources/AndroidRapidTransferCore/AppVersion.swift")
-GENERATE_KEYS = File.join(PROJECT_DIR, ".build/artifacts/sparkle/Sparkle/bin/generate_keys")
 XCODE_DEVELOPER_DIR = "/Applications/Xcode.app/Contents/Developer"
 
 def app_version
@@ -92,21 +93,26 @@ def with_notary_key_file(&block)
   end
 end
 
-# ci-build.sh appcast signs with SPARKLE_ED_PRIVATE_KEY. Without it, the key is
-# exported from the login keychain into this process only.
-def load_sparkle_key
-  return unless ENV["SPARKLE_ED_PRIVATE_KEY"].to_s.empty?
-
-  UI.user_error!("Missing #{GENERATE_KEYS}; run swift build in #{PROJECT_DIR} first") \
-    unless File.executable?(GENERATE_KEYS)
-  Dir.mktmpdir("art-sparkle") do |dir|
-    file = File.join(dir, "key")
-    UI.message("Exporting the Sparkle key from the login keychain (macOS may ask to allow it)")
-    _, status = Open3.capture2(GENERATE_KEYS, "-x", file)
-    UI.user_error!("generate_keys -x failed; is the Sparkle key in the login keychain?") unless status.success?
-    ENV["SPARKLE_ED_PRIVATE_KEY"] = File.read(file).strip
-  end
-  UI.user_error!("The exported Sparkle key is empty") if ENV["SPARKLE_ED_PRIVATE_KEY"].empty?
+# The Sparkle private key from SPARKLE_PRIVATE_KEY, checked against the public
+# key the app ships with: an appcast signed with any other key builds fine, but
+# every installed copy would reject the update.
+def sparkle_private_key
+  key = ENV["SPARKLE_PRIVATE_KEY"].to_s.strip
+  UI.user_error!("Set SPARKLE_PRIVATE_KEY (in fastlane/.env or the environment), or pass adhoc:true") \
+    if key.empty?
+  raw = Base64.decode64(key)
+  public_key =
+    case raw.bytesize
+    when 32 then OpenSSL::PKey.new_raw_private_key("ED25519", raw).raw_public_key
+    when 96 then raw.byteslice(64, 32) # older exports: 64-byte private key, then the public key
+    else UI.user_error!("SPARKLE_PRIVATE_KEY is not a Sparkle key exported with generate_keys -x")
+    end
+  config = File.read(File.join(SCRIPTS_DIR, "release-config.sh"))
+  expected = config[/^SPARKLE_PUBLIC_ED_KEY="([^"]+)"/, 1] \
+    || UI.user_error!("No SPARKLE_PUBLIC_ED_KEY in release-config.sh")
+  UI.user_error!("SPARKLE_PRIVATE_KEY does not match SPARKLE_PUBLIC_ED_KEY (#{expected}) in release-config.sh") \
+    unless Base64.strict_encode64(public_key) == expected
+  key
 end
 
 platform :mac do
@@ -131,7 +137,7 @@ platform :mac do
     adhoc = options[:adhoc].to_s == "true"
     unless adhoc
       check_signing_credentials
-      load_sparkle_key
+      sparkle_key = sparkle_private_key
     end
     tag = "v#{app_version}"
     variables = {
@@ -139,6 +145,8 @@ platform :mac do
       "ART_REQUIRE_SIGNING" => adhoc ? "0" : "1",
       "ART_CI_OUTPUT_DIR" => OUTPUT_DIR
     }.merge(build_number_env(options))
+    # ci-build.sh appcast reads the key as SPARKLE_ED_PRIVATE_KEY, the CI secret's name.
+    variables["SPARKLE_ED_PRIVATE_KEY"] = sparkle_key unless adhoc
     with_notary_key_file do
       with_env(variables) do
         sh(CI_BUILD, "package")

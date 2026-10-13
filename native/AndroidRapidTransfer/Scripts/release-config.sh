@@ -128,7 +128,7 @@ SPARKLE_FEED_URL="https://github.com/sameh0/android-rapid-transfer/releases/late
 # Public half of the EdDSA key that signs update archives. The private half
 # lives only in the release maintainer's login keychain (Sparkle's
 # generate_keys); it is never written to the repository or to disk.
-SPARKLE_PUBLIC_ED_KEY="1ES3HtqHaz5qU651LJPyqCl1v1/s7n/oiVrX6vIbcvA="
+SPARKLE_PUBLIC_ED_KEY="+7P4sG+BXv+z20ipGYXj50A7jB/ebSYrQUt/ghUCslQ="
 
 # CFBundleVersion. Sparkle orders updates by it, so it must grow with every
 # release. Defaults to the commit count of HEAD, which only grows on a linear
