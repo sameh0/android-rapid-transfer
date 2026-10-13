@@ -3,9 +3,12 @@
 #
 #   push to main       a "nightly" ad-hoc build (artifact kept 14 days)
 #   workflow_dispatch  a build of the chosen ref, signed when secrets allow
-#   push of a tag      a release build (tag 1.2.3 or 1.2.3-beta.1 = the version),
-#                      signed when secrets allow, attached to
-#                      a DRAFT GitHub release (never published automatically)
+#   push of a tag      a release build (tag 1.2.3 or 1.2.3-beta.1 = the version)
+#                      and a DRAFT GitHub release (never published
+#                      automatically). Only a Developer ID signed, notarized
+#                      DMG is attached; without the secrets the draft gets the
+#                      notes and Linux packages, and the maintainer uploads the
+#                      notarized DMG by hand.
 #
 # Everything is done by native/AndroidRapidTransfer/Scripts/ci-build.sh
 # (`package`, then `appcast`), which runs the same way on a Mac.
@@ -179,45 +182,47 @@ jobs:
           sha256sum -c SHA256SUMS
           ls -l
 
-          {
-            echo "Android Rapid Transfer $VERSION for macOS 14 or later (Apple silicon and Intel)."
-            echo
-            if [[ "$SIGNING" != developer-id ]]; then
-              echo "> [!WARNING]"
-              echo "> This build is **ad-hoc signed**: it is not signed with a Developer ID and not notarized,"
-              echo "> so macOS Gatekeeper will warn when it is first opened."
+          # The macOS DMG on a release is always Developer ID signed and
+          # notarized. Without the signing secrets the maintainer uploads it
+          # by hand (`fastlane mac dmg` prints the command), so an ad-hoc
+          # build attaches nothing: the draft carries the notes (and the
+          # Linux packages, added by linux-draft-release).
+          if [[ "$SIGNING" == developer-id ]]; then
+            {
+              echo "Android Rapid Transfer $VERSION for macOS 14 or later (Apple silicon and Intel)."
               echo
-            fi
-            echo "### SHA-256"
-            echo
-            echo '```'
-            cat SHA256SUMS
-            echo '```'
-            echo
-            echo "<details><summary>Build information</summary>"
-            echo
-            echo '```'
-            grep -v '^#' build-info.txt
-            echo '```'
-            echo
-            echo "</details>"
-          } > release-notes.md
-
-          assets=(*.dmg SHA256SUMS build-info.txt)
-          [[ -f appcast.xml ]] && assets+=(appcast.xml)
+              echo "### SHA-256"
+              echo
+              echo '```'
+              cat SHA256SUMS
+              echo '```'
+              echo
+              echo "<details><summary>Build information</summary>"
+              echo
+              echo '```'
+              grep -v '^#' build-info.txt
+              echo '```'
+              echo
+              echo "</details>"
+            } > release-notes.md
+            assets=(*.dmg SHA256SUMS build-info.txt)
+            [[ -f appcast.xml ]] && assets+=(appcast.xml)
+          else
+            {
+              echo "Android Rapid Transfer $VERSION for macOS 14 or later (Apple silicon and Intel)."
+              echo
+              echo "The notarized macOS DMG is attached separately."
+            } > release-notes.md
+            assets=()
+          fi
 
           if gh release view "$TAG" --json isDraft --jq .isDraft > is-draft.txt 2>/dev/null; then
             if [[ "$(cat is-draft.txt)" != true ]]; then
               echo "::error::Release $TAG is already published; refusing to change it."
               exit 1
             fi
-            # A Developer ID DMG built locally (`fastlane mac dmg`) and uploaded
-            # by hand must not be replaced by an ad-hoc build.
-            dmg=(*.dmg)
-            existing_assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
-            if [[ "$SIGNING" != developer-id ]] \
-              && grep -Fxq "${dmg[0]/%-adhoc.dmg/.dmg}" <<<"$existing_assets"; then
-              echo "::notice::Draft $TAG already holds a Developer ID DMG; leaving its macOS assets as they are."
+            if [[ "$SIGNING" != developer-id ]]; then
+              echo "::notice::Ad-hoc build: leaving the existing draft $TAG (notes and macOS assets) as it is."
               exit 0
             fi
             echo "Updating the existing draft release $TAG."
@@ -226,7 +231,7 @@ jobs:
           else
             prerelease_flag=()
             [[ "$PRERELEASE" == true ]] && prerelease_flag=(--prerelease)
-            gh release create "$TAG" "${assets[@]}" \
+            gh release create "$TAG" ${assets[@]+"${assets[@]}"} \
               --draft \
               --verify-tag \
               --title "Android Rapid Transfer $VERSION" \
