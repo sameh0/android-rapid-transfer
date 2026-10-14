@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AppVersion {
-    public static let current = "0.1.0"
+    public static let current = "1.0.0"
 
     /// A version with a pre-release suffix (`0.2.0-beta.1`) marks a beta build.
     public static func isPrerelease(_ version: String = current) -> Bool {

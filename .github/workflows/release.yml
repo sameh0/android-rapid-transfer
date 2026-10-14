@@ -2,7 +2,15 @@
 # DMG, with SHA256SUMS and build-info.txt, uploaded as a workflow artifact.
 #
 #   push to main       a "nightly" ad-hoc build (artifact kept 14 days)
-#   workflow_dispatch  a build of the chosen ref, signed when secrets allow
+#   workflow_dispatch  a build of the chosen ref, signed when secrets allow;
+#                      `platforms` limits it to macOS or Linux, and
+#                      `release_tag` gives the Linux packages that release's
+#                      version (for adding Linux packages to a release that is
+#                      already published: `gh workflow run release.yml --ref
+#                      main -f platforms=linux -f release_tag=1.2.3`, then
+#                      `gh release upload` the artifacts by hand). The chosen
+#                      ref is built, not the tag: its metainfo must list the
+#                      version.
 #   push of a tag      a release build (tag 1.2.3 or 1.2.3-beta.1 = the version)
 #                      and a DRAFT GitHub release (never published
 #                      automatically). Only a Developer ID signed, notarized
@@ -44,12 +52,21 @@ on:
         description: Sign and notarize when the secrets are present
         type: boolean
         default: true
+      platforms:
+        description: Platforms to build
+        type: choice
+        options: [all, macos, linux]
+        default: all
+      release_tag:
+        description: Linux job only - give the packages this release's version (e.g. 1.2.3)
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.ref }}-${{ inputs.release_tag }}
   # A newer main push supersedes a nightly; a tag build always finishes.
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
@@ -59,6 +76,8 @@ env:
 jobs:
   package:
     name: Package DMG
+    # inputs.platforms is empty for push events, so they always build.
+    if: inputs.platforms != 'linux'
     # Only standard GitHub-hosted labels (free on a public repository); any
     # other ART_MACOS_RUNNER value, e.g. a paid -large/-xlarge label, is ignored.
     runs-on: ${{ contains(fromJSON('["macos-26", "macos-15", "macos-latest", "xcode-27"]'), vars.ART_MACOS_RUNNER) && vars.ART_MACOS_RUNNER || 'macos-26' }}
@@ -254,6 +273,7 @@ jobs:
             runner: ubuntu-24.04
           - arch: aarch64
             runner: ubuntu-24.04-arm
+    if: inputs.platforms != 'macos'
     runs-on: ${{ matrix.runner }}
     container: ubuntu:26.04
     timeout-minutes: 60
@@ -280,7 +300,7 @@ jobs:
       - name: Package
         id: package
         env:
-          ART_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          ART_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
         run: native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh package
 
       - name: Upload Linux packages

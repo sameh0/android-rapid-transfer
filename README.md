@@ -83,6 +83,12 @@ interface (see [Linux](#linux)).
 - **At home on macOS.** Light and dark appearance, full keyboard operation,
   VoiceOver labels and announcements throughout, and every animation honours
   Reduce Motion and goes quiet when the window is idle or hidden.
+- **Gets other programs out of the way.** When something else has the phone,
+  the app finds out what and tells you, instead of leaving you to guess. macOS's
+  own Image Capture service, which takes Samsung phones the moment they're
+  plugged in, is released with one click (**Release the Phone**), and the
+  Troubleshooting window lists the running apps known to block the connection,
+  each with a Quit button (or **Quit All**).
 - **Help built in.** A short setup guide on first launch, troubleshooting for
   the common connection problems, and an opt-in diagnostic bug report.
 - **Updates itself** from GitHub Releases, with an optional beta channel.
@@ -152,6 +158,23 @@ connected to an Apple silicon Mac over USB (and, where noted, to a Linux laptop)
 | Copy a folder of 50 files to the phone | **1.9 s** |
 | Scan the whole phone (208 folders, 2,052 files) | **2.2 s** |
 | Show a folder of 2,000 items (list or grid) | **~0.05 s** to lay out and draw |
+
+### Compared with Android File Transfer
+
+Google's Android File Transfer on the same Mac, phone, cable and port, with the
+same files (best of three runs for each; the last column is how many times
+faster Android Rapid Transfer was):
+
+| What | Android File Transfer | Android Rapid Transfer | |
+|---|---|---|---|
+| Open a folder of 2,000 files | 8.0 s | **0.37 s** | **×21** |
+| Copy a 200 MB file to the Mac | 7.3 s | **4.9 s** | ×1.5 |
+| Copy a 200 MB file to the phone | 7.4 s | **5.3 s** | ×1.3 |
+| Copy 50 photos (157 MB) to the phone | 8.1 s | **5.8 s** | ×1.3 |
+| Copy 50 photos (157 MB) to the Mac | 6.1 s | **5.4 s** | ×1.1 |
+
+Copies are limited by the phone's USB 2.0 link, so the gap is largest where the app
+does the work itself: listing folders.
 
 These are single-device measurements, not a benchmark suite. Your numbers will
 depend on the phone, its USB controller, the cable and the port. Many phones
@@ -242,11 +265,14 @@ Charging only and back to File transfer.
 <details>
 <summary><strong>Another app has the phone</strong></summary>
 
-MTP lets only one app use a phone at a time. Quit these before connecting:
-Google's discontinued Mac file-transfer app (it opens itself whenever a phone
-connects, so remove it from Login Items too), Google Drive, Dropbox or OneDrive
-camera upload, Samsung Smart Switch, and Image Capture, Preview or Photos if macOS
-opened them for the phone.
+MTP lets only one app use a phone at a time. The app names the program holding
+the phone. If it's macOS's Image Capture service (common with Samsung phones),
+click **Release the Phone**. Otherwise quit the program and click **Retry**:
+**Help › Troubleshooting & FAQ** lists the running apps known to block the
+connection, with a Quit button for each. They are Google's discontinued Mac
+file-transfer app (it opens itself whenever a phone connects, so remove it from
+Login Items too), Google Drive, Dropbox or OneDrive camera upload, Samsung Smart
+Switch, and Image Capture, Preview or Photos if macOS opened them for the phone.
 </details>
 
 <details>

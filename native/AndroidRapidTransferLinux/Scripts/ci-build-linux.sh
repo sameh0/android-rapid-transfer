@@ -231,6 +231,24 @@ choose_product() {
     fi
 }
 
+# The build information (GIT_SHA, GIT_DIRTY) and the packages' timestamps
+# (SOURCE_DATE_EPOCH in linux-package.sh) come from git. In a container job
+# root runs git on a checkout owned by the runner's user, which git refuses as
+# "dubious ownership" until the checkout is marked safe; the container is
+# thrown away, so its global config can take that. Elsewhere a checkout git
+# cannot read only warns.
+check_git() {
+    local err
+    err=$(git -C "$REPO_ROOT" rev-parse HEAD 2>&1 >/dev/null) && return 0
+    if [[ -n "${GITHUB_ACTIONS:-}" && "$err" == *"dubious ownership"* ]]; then
+        note "Marking $REPO_ROOT as a safe git directory (the checkout belongs to another user)."
+        git config --global --add safe.directory "$REPO_ROOT"
+        err=$(git -C "$REPO_ROOT" rev-parse HEAD 2>&1 >/dev/null) && return 0
+    fi
+    [[ -n "${GITHUB_ACTIONS:-}" ]] || { warn "git cannot read $REPO_ROOT, so GIT_SHA will be 'unknown': $err"; return 0; }
+    fail "git cannot read $REPO_ROOT, so the build information would have no commit: $err"
+}
+
 write_build_info() {
     local info=$1 git_sha git_ref dirty file
     git_sha=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)
@@ -269,6 +287,7 @@ write_build_info() {
 run_package() {
     [[ $# -eq 0 ]] || usage
     toolchain_summary
+    check_git
     stamp_version_from_tag
     APP_VERSION=$(app_version)
     choose_product
