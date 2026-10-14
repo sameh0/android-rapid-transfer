@@ -35,6 +35,9 @@ self-contained.
   version tags such as `1.2.3`) only call `native/AndroidRapidTransfer/Scripts/ci-build.sh test|package|appcast`,
   so reproduce CI failures locally with that script. Signing secrets are optional (ad-hoc
   `*-adhoc.dmg` without them).
+- Homebrew: `homebrew.yml` points the cask in the `sameh0/homebrew-tap` tap at each
+  published (non-prerelease) release via `Scripts/update-homebrew-cask.sh`; it needs
+  the `HOMEBREW_TAP_DEPLOY_KEY` secret.
 - Cold `swift build` in a fresh checkout or worktree takes minutes — run it in the
   background, not as a silent foreground command.
 - Animation: use the tokens and helpers in `Sources/AndroidRapidTransfer/Motion.swift`

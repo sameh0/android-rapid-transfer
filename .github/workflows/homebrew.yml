@@ -1,0 +1,115 @@
+# Points the Homebrew cask (sameh0/homebrew-tap, Casks/android-rapid-transfer.rb)
+# at a release once it is published, so that
+# `brew install --cask sameh0/tap/android-rapid-transfer` installs it.
+#
+#   release published  the new release (prereleases are skipped: the cask
+#                      follows stable releases only)
+#   workflow_dispatch  the given release tag, e.g. to redo a bump; it must be
+#                      published, not a draft
+#
+# It runs on publication rather than with release.yml's tag build because a
+# draft's DMG cannot be downloaded by Homebrew. The DMG is downloaded from the
+# published release and hashed by
+# native/AndroidRapidTransfer/Scripts/update-homebrew-cask.sh, which runs the
+# same way on a Mac (`<tap-dir> <version> <dmg>`) and refuses a prerelease or
+# a version older than the cask's.
+#
+# Secret, optional (without it the job says so and does nothing):
+#   HOMEBREW_TAP_DEPLOY_KEY   private half of a deploy key with write access
+#                             on sameh0/homebrew-tap
+name: Homebrew
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to point the cask at (e.g. 1.2.3)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # One bump at a time, in order: each one pushes to the tap.
+  group: homebrew-tap
+  cancel-in-progress: false
+
+jobs:
+  bump-cask:
+    name: Update the Homebrew cask
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - name: Check for the deploy key
+        id: key
+        env:
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          if [[ -n "$HOMEBREW_TAP_DEPLOY_KEY" ]]; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set; the cask is not updated for $TAG."
+            echo "present=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out
+        if: steps.key.outputs.present == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the release's DMG
+        if: steps.key.outputs.present == 'true'
+        id: dmg
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" != false ]]; then
+            echo "::error::Release $TAG is a draft; publish it first."
+            exit 1
+          fi
+          source native/AndroidRapidTransfer/Scripts/release-config.sh
+          dmg="$APP_ARTIFACT_NAME-$TAG.dmg"
+          gh release download "$TAG" --pattern "$dmg" --dir dmg
+          # The release's SHA256SUMS lists the DMG when CI attached it; a DMG
+          # uploaded by hand may come without one.
+          if gh release download "$TAG" --pattern SHA256SUMS --dir dmg 2>/dev/null; then
+            (cd dmg && grep " $dmg\$" SHA256SUMS | sha256sum -c -)
+          fi
+          echo "path=dmg/$dmg" >>"$GITHUB_OUTPUT"
+          echo "tap=$HOMEBREW_TAP_REPOSITORY" >>"$GITHUB_OUTPUT"
+
+      - name: Check out the tap
+        if: steps.key.outputs.present == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.dmg.outputs.tap }}
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          path: tap
+
+      - name: Update the cask and push it
+        if: steps.key.outputs.present == 'true'
+        env:
+          DMG: ${{ steps.dmg.outputs.path }}
+        run: |
+          set -euo pipefail
+          result=$(native/AndroidRapidTransfer/Scripts/update-homebrew-cask.sh tap "$TAG" "$DMG")
+          if [[ "$result" == unchanged ]]; then
+            echo "The cask already points at $TAG."
+            exit 0
+          fi
+          cd tap
+          git diff
+          git config user.name "Sameh Sayed"
+          git config user.email "7395260+sameh0@users.noreply.github.com"
+          git commit --all --message "android-rapid-transfer $TAG"
+          git push
+          echo "::notice::The Homebrew cask now installs $TAG."

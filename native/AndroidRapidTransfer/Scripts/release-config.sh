@@ -125,6 +125,12 @@ verify_bundle_layout() {
 # Requires the GitHub repository to be named sameh0/android-rapid-transfer.
 SPARKLE_FEED_URL="https://github.com/sameh0/android-rapid-transfer/releases/latest/download/appcast.xml"
 
+# Homebrew: the tap repository and the cask in it, which .github/workflows/
+# homebrew.yml points at each published release (update-homebrew-cask.sh).
+# Users install with `brew install --cask sameh0/tap/android-rapid-transfer`.
+HOMEBREW_TAP_REPOSITORY="sameh0/homebrew-tap"
+HOMEBREW_CASK_PATH="Casks/android-rapid-transfer.rb"
+
 # Public half of the EdDSA key that signs update archives. The private half
 # lives only in the release maintainer's login keychain (Sparkle's
 # generate_keys); it is never written to the repository or to disk.
