@@ -190,7 +190,13 @@ uses the app's built-in demo phone, whose copies run at about the measured speed
 
 Releases are signed with a Developer ID and notarized by Apple.
 
-**Homebrew** *(coming soon)*: `brew install --cask android-rapid-transfer`.
+**Homebrew:**
+
+```sh
+brew install --cask sameh0/tap/android-rapid-transfer
+```
+
+The app updates itself, so `brew upgrade` skips it unless you add `--greedy`.
 
 **Requirements:** macOS 14 Sonoma or later on Apple silicon or Intel, an Android
 phone (or another MTP device), and a USB cable that carries data. Some cables only
