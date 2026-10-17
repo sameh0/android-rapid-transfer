@@ -1,0 +1,71 @@
+name: Device report
+description: Tell us how Android Rapid Transfer worked with your phone, good or bad.
+title: "Device report: "
+labels: ["device report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the app with your phone. Every report helps: it has been measured on only a few devices so far.
+        For a crash or a bug, use **Help › Report a Bug…** in the app instead; it attaches the diagnostics.
+  - type: input
+    id: phone
+    attributes:
+      label: Phone make and model
+      placeholder: e.g. Samsung Galaxy S24, Google Pixel 9
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: e.g. Android 16 (One UI 8)
+    validations:
+      required: true
+  - type: input
+    id: computer
+    attributes:
+      label: Computer OS and version
+      description: Add the chip for a Mac, the distribution for Linux.
+      placeholder: e.g. macOS 26.1, Apple silicon / Ubuntu 26.04, x86_64
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Android Rapid Transfer version
+      description: Shown in **About Android Rapid Transfer** (the app menu on a Mac, the main menu on Linux).
+      placeholder: e.g. 1.0.0
+  - type: dropdown
+    id: usb-mode
+    attributes:
+      label: USB mode used on the phone
+      options:
+        - File transfer (MTP)
+        - Photo transfer (PTP)
+        - Something else / not sure
+    validations:
+      required: true
+  - type: input
+    id: speed
+    attributes:
+      label: Measured transfer speed
+      description: The speed the copies panel showed, with the direction and the file size. Leave it empty if you didn't copy anything large.
+      placeholder: e.g. to the computer ~40 MB/s, to the phone ~35 MB/s (one 2 GB video)
+  - type: checkboxes
+    id: worked
+    attributes:
+      label: What worked
+      options:
+        - label: The phone connected and its files showed up
+        - label: Copying to the computer
+        - label: Copying to the phone
+        - label: New folder, rename or delete on the phone
+        - label: SD card (if the phone has one)
+  - type: textarea
+    id: failed
+    attributes:
+      label: What failed or behaved oddly
+      description: What you did, what happened, and any message the app showed. Write "nothing" if everything worked.
+    validations:
+      required: true

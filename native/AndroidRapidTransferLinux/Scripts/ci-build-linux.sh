@@ -10,6 +10,8 @@
 #       warnings treated as errors (ART_WARNINGS_AS_ERRORS=0 turns that off),
 #       then runs the GTK self-tests (below) against a real display: Xvfb when
 #       there is no display and xvfb-run is installed. Logs land in <output>/logs.
+#       A package whose tests run longer than ART_TEST_TIMEOUT seconds (default
+#       900) is stopped with SIGABRT and fails; see watch_tests.
 #
 #   Scripts/ci-build-linux.sh package
 #       Scripts/linux-build.sh, then Scripts/linux-package.sh all: the tarball,
@@ -118,6 +120,29 @@ logged() {
     "$@" 2>&1 | tee -a "$log"
 }
 
+# Stops a hung test run instead of leaving it to the job's timeout, which
+# cancels it with no trace of where it hung. Runs in the background beside one
+# package's `swift test`: after ART_TEST_TIMEOUT seconds (default 900, many
+# times a normal run) it sends that package's xctest process SIGABRT, which the
+# Swift runtime answers with a backtrace (SWIFT_BACKTRACE, set for the tests)
+# in the test log. <package>-hung in the log directory records that it fired.
+# Usage: watch_tests <package> <bin-dir> &
+watch_tests() {
+    local package=$1 bin_dir=$2 limit=${ART_TEST_TIMEOUT:-900} waited=0 pids
+    while (( waited < limit )); do
+        sleep 1
+        waited=$((waited + 1))
+    done
+    pids=$(pgrep -f "$bin_dir/[^ ]*\.xctest" || true)
+    [[ -n "$pids" ]] || return 0
+    echo "$package tests were still running after ${limit}s and were stopped (ART_TEST_TIMEOUT)." >"$LOG_DIR/$package-hung"
+    # shellcheck disable=SC2086 # one or more pids
+    kill -ABRT $pids 2>/dev/null || true
+    sleep 30
+    # shellcheck disable=SC2086
+    kill -KILL $pids 2>/dev/null || true
+}
+
 # Runs a GUI command against a display: the session's, or Xvfb's.
 with_display() {
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" || -n "${BROADWAY_DISPLAY:-}" ]]; then
@@ -166,9 +191,23 @@ run_tests() {
             && logged "$LOG_DIR/$package-build.log" swift build --build-tests ${scratch[@]+"${scratch[@]}"} ${flags[@]+"${flags[@]}"}) \
             || fail "$package failed to build; see $LOG_DIR/$package-build.log"
         note "Testing $package..."
+        local bin_dir watchdog status=0
+        bin_dir=$(cd "$NATIVE_DIR/$package" && swift build --show-bin-path ${scratch[@]+"${scratch[@]}"})
+        rm -f "$LOG_DIR/$package-hung"
+        watch_tests "$package" "$bin_dir" &
+        watchdog=$!
+        # SWIFT_BACKTRACE: a crash, or the watchdog's SIGABRT, prints a
+        # backtrace into the test log.
         (cd "$NATIVE_DIR/$package" \
-            && logged "$LOG_DIR/$package-test.log" swift test --skip-build ${scratch[@]+"${scratch[@]}"} ${flags[@]+"${flags[@]}"}) \
-            || fail "$package tests failed; see $LOG_DIR/$package-test.log"
+            && logged "$LOG_DIR/$package-test.log" \
+                env SWIFT_BACKTRACE=enable=yes,threads=all,interactive=no,color=no \
+                swift test --skip-build ${scratch[@]+"${scratch[@]}"} ${flags[@]+"${flags[@]}"}) \
+            || status=$?
+        kill "$watchdog" 2>/dev/null || true
+        wait "$watchdog" 2>/dev/null || true
+        [[ ! -e "$LOG_DIR/$package-hung" ]] \
+            || fail "$(<"$LOG_DIR/$package-hung") The last test started in $LOG_DIR/$package-test.log is the one that hung; the Swift runtime's backtrace follows it."
+        [[ "$status" -eq 0 ]] || fail "$package tests failed; see $LOG_DIR/$package-test.log"
         # A crash can end a run early; count only runs in which every XCTest
         # bundle reached its final summary.
         local totals started passed failed executed skipped

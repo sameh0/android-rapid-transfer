@@ -605,7 +605,7 @@ public final class TransferViewModel {
             request.settingPreprocessFiles(preprocessesFiles(request.direction))
         )
         queuesByJobID[id] = queue
-        batchIDByJobID[id] = UUID()
+        assignBatch(UUID(), toJob: id)
 
         try await withCheckedThrowingContinuation { continuation in
             exportWaiters[id] = continuation
@@ -741,14 +741,30 @@ public final class TransferViewModel {
 
     private func updateActivitySession(for job: TransferJobSnapshot) {
         if let batchID = batchIDByJobID[job.id], !job.state.isTerminal {
-            if activeSessionBatches.isEmpty {
-                lastSessionSummary = nil
-            }
-            activeSessionBatches.insert(batchID)
+            joinActivitySession(batchID)
         }
         if rows.allSatisfy({ $0.state.isTerminal }) {
             endActivitySession()
         }
+    }
+
+    /// Records the batch an enqueued job belongs to. The queue publishes the
+    /// job's first update before `enqueue` returns, and that update can be
+    /// received first: a job whose row is already showing joins the session
+    /// here, or a job that stays queued would be left out of the overall
+    /// progress until its next update.
+    private func assignBatch(_ batchID: UUID, toJob jobID: UUID) {
+        batchIDByJobID[jobID] = batchID
+        if let row = rows.first(where: { $0.id == jobID }), !row.state.isTerminal {
+            joinActivitySession(batchID)
+        }
+    }
+
+    private func joinActivitySession(_ batchID: UUID) {
+        if activeSessionBatches.isEmpty {
+            lastSessionSummary = nil
+        }
+        activeSessionBatches.insert(batchID)
     }
 
     /// Summarizes the session that just went idle, then forgets its batches.
@@ -1438,7 +1454,7 @@ public final class TransferViewModel {
                 request.settingPreprocessFiles(preprocessesFiles(request.direction))
             )
             queuesByJobID[id] = queue
-            batchIDByJobID[id] = batchID
+            assignBatch(batchID, toJob: id)
             ids.append(id)
         }
         return ids

@@ -49,7 +49,7 @@ APT_PACKAGES=(
     binutils build-essential libc6-dev libcurl4-openssl-dev libedit2 libncurses-dev
     libsqlite3-0 libz3-dev pkg-config zlib1g-dev
     libgtk-4-dev libadwaita-1-dev
-    xvfb xauth dbus dbus-x11 adwaita-icon-theme
+    xvfb xauth dbus dbus-x11 adwaita-icon-theme procps
     appstream desktop-file-utils librsvg2-bin gtk-update-icon-cache dpkg-dev rpm python3
 )
 

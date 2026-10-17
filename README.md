@@ -432,8 +432,10 @@ Bug reports, device reports and pull requests are welcome.
   into a zip (on the Mac, on your Desktop) and opens a new
   [GitHub issue](https://github.com/sameh0/android-rapid-transfer/issues) for you
   to attach it to.
-- **Tried it with your phone?** An issue saying which phone, what worked and how
-  fast it was helps a lot: the app has been measured on only a few devices so far.
+- **Tried it with your phone?** A
+  [device report](https://github.com/sameh0/android-rapid-transfer/issues/new?template=device-report.yml)
+  saying which phone, what worked and how fast it was helps a lot: the app has
+  been measured on only a few devices so far.
 - **Sending a change?** Run `native/AndroidRapidTransfer/Scripts/ci-build.sh test`
   on a Mac (or `native/AndroidRapidTransferLinux/Scripts/ci-build-linux.sh test`
   on Linux) first: CI treats compiler warnings as errors. Try it against `--mock` (and a real phone, if the change touches the USB or
