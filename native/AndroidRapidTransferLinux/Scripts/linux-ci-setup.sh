@@ -42,14 +42,18 @@ done
 note() { echo "==> $*"; }
 
 # Build: Swift's own requirements (as in the official images) plus GTK 4 and
-# libadwaita. Test: Xvfb for the GTK self-test. Package: the validators and
-# inspectors the packaging scripts run when present.
+# libadwaita. Test: Xvfb for the GTK self-test. Package: for the AppImage,
+# patchelf and locales (quick-sharun reads the libraries with patchelf, runs
+# the app under xvfb-run and compiles a fallback en_US.UTF-8 locale) and
+# adwaita-icon-theme (bundled); and the validators and inspectors the
+# packaging scripts run when present.
 APT_PACKAGES=(
     ca-certificates curl git gnupg tzdata unzip xz-utils file
     binutils build-essential libc6-dev libcurl4-openssl-dev libedit2 libncurses-dev
     libsqlite3-0 libz3-dev pkg-config zlib1g-dev
     libgtk-4-dev libadwaita-1-dev
     xvfb xauth dbus dbus-x11 adwaita-icon-theme procps
+    patchelf locales
     appstream desktop-file-utils librsvg2-bin gtk-update-icon-cache dpkg-dev rpm python3
 )
 

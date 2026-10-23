@@ -288,8 +288,23 @@ check_git() {
     fail "git cannot read $REPO_ROOT, so the build information would have no commit: $err"
 }
 
+# The oldest kernel the AppImage's bundled glibc supports (its ABI note): with
+# GTK, libadwaita and glibc inside, that is all it needs from the system
+# besides FUSE to mount itself (or APPIMAGE_EXTRACT_AND_RUN=1).
+appimage_minimum_kernel() {
+    local appimage=$1 dir kernel
+    dir=$(mktemp -d)
+    (cd "$dir" && "$appimage" --appimage-extract lib/libc.so.6 >/dev/null) \
+        || fail "Could not extract lib/libc.so.6 from $appimage"
+    kernel=$(readelf -n "$dir/squashfs-root/lib/libc.so.6" | sed -n 's/.*OS: Linux, ABI: \([0-9.]*\).*/\1/p' | head -n 1)
+    rm -rf "$dir"
+    [[ -n "$kernel" ]] || fail "The AppImage's libc.so.6 has no ABI note"
+    echo "$kernel"
+}
+
 write_build_info() {
-    local info=$1 git_sha git_ref dirty file
+    local info=$1 git_sha git_ref dirty file appimage_kernel
+    appimage_kernel=$(appimage_minimum_kernel "$(ls "$OUTPUT_DIR"/*.AppImage)")
     git_sha=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)
     git_ref=${GITHUB_REF_NAME:-$(git -C "$REPO_ROOT" describe --tags --exact-match 2>/dev/null \
         || git -C "$REPO_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || echo detached)}
@@ -305,6 +320,9 @@ write_build_info() {
         echo "PRERELEASE=$([[ "$APP_VERSION" == *-* ]] && echo true || echo false)"
         echo "PRODUCT=$PRODUCT"
         echo "ARCHITECTURE=$ARCH"
+        echo "# MINIMUM_*: what the tarball, .deb and .rpm need from the system. The"
+        echo "# AppImage bundles GTK, libadwaita and glibc and needs only this kernel."
+        echo "APPIMAGE_MINIMUM_KERNEL=$appimage_kernel"
         echo "MINIMUM_GTK=$LINUX_MIN_GTK"
         echo "MINIMUM_LIBADWAITA=$LINUX_MIN_ADWAITA"
         echo "MINIMUM_GLIBC=$(objdump -T "$STAGE/usr/bin/$LINUX_EXECUTABLE" | grep -o 'GLIBC_[0-9][0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -n 1)"

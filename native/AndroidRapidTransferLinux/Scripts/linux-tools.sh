@@ -18,6 +18,16 @@ tool_spec() {
         appimagetool_aarch64) echo "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-aarch64.AppImage f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158" ;;
         appimage_runtime_x86_64) echo "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d" ;;
         appimage_runtime_aarch64) echo "https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-aarch64 00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444" ;;
+        # quick-sharun (pkgforge-dev/Anylinux-AppImages, pinned to a commit):
+        # collects the AppImage's library closure. It runs from the sharun
+        # 3.7.1 and cross-libc-dlopen 0.2.8 tarballs below; those are the
+        # versions and checksums this commit of the script pins itself
+        # (SHARUN_LINK/SHARUN_SHA, CROSS_LIBC_DLOPEN_*), so bump all together.
+        quick_sharun) echo "https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/d21742ad88c3766f248a7d8ce83f02e95aaedaa8/useful-tools/quick-sharun.sh 36e9400fdda2151f2d4a08b587633cedf41adc682c3ab9ab35b3a7c487444b17" ;;
+        sharun_x86_64) echo "https://github.com/pkgforge-dev/Anylinux-sharun/releases/download/3.7.1/sharun+helper-libs-x86_64.tar 457efae5913c6a2390a996c3aeb6af2e543c8f16f12e2acd905a7ea39a7bc094" ;;
+        sharun_aarch64) echo "https://github.com/pkgforge-dev/Anylinux-sharun/releases/download/3.7.1/sharun+helper-libs-aarch64.tar 9262162608824022b9d64c665ab2a8614b8b8017e310fffffa80cf8ed6d210cc" ;;
+        cross_libc_dlopen_x86_64) echo "https://github.com/pkgforge-dev/cross-libc-dlopen/releases/download/v0.2.8/cross-libc-dlopen-x86_64.tar 7fc594fca7203eee26e651b4b0d5c09bd8f8cc34ed84df2ffed2a5d3e060214c" ;;
+        cross_libc_dlopen_aarch64) echo "https://github.com/pkgforge-dev/cross-libc-dlopen/releases/download/v0.2.8/cross-libc-dlopen-aarch64.tar 673a4489b59bb5f7c129648b94bdba97006e9e2992f91f3d0b7fcc5661d1b832" ;;
         # nfpm 2.47.0 (static Go binary): builds the .deb and .rpm.
         nfpm_x86_64) echo "https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783" ;;
         nfpm_aarch64) echo "https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_arm64.tar.gz 1c0f5f2999b9a974bfb04fdb0cc3306096de530ac5dbb25d739cc5f5219c919c" ;;

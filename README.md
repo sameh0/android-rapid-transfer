@@ -151,10 +151,12 @@ copy, preferences, help and the bug report.
   <img src="docs/media/screenshot-linux-copying-dark.png" width="880" alt="The Linux app copying two photos from the phone, with the copies panel showing progress and speed">
 </p>
 
-**Requirements:** a 64-bit Linux with glibc 2.43 or later, GTK 4.12 or later and
-libadwaita 1.6 or later: for example Ubuntu 26.04, Fedora 44 or Arch. Packages are
-built for x86_64 and aarch64 (aarch64 is built and tested in CI but hasn't
-been tried with a real phone yet).
+**Requirements:** a 64-bit Linux. The AppImage brings its own GTK, libadwaita
+and glibc, so it also runs on older distributions such as Ubuntu 22.04 or
+Debian 12. The `.deb`, `.rpm` and tarball use the system's libraries and need
+glibc 2.43 or later, GTK 4.12 or later and libadwaita 1.6 or later: for example
+Ubuntu 26.04, Fedora 44 or Arch. Packages are built for x86_64 and aarch64
+(aarch64 is built and tested in CI but hasn't been tried with a real phone yet).
 
 ## Speed
 
@@ -221,8 +223,9 @@ Each release carries a `.deb`, an `.rpm`, an AppImage and a tarball:
 
 - **Debian, Ubuntu:** `sudo apt install ./android-rapid-transfer_<version>-1_<arch>.deb`
 - **Fedora:** `sudo dnf install ./android-rapid-transfer-<version>-1.<arch>.rpm`
-- **Any distribution:** make the AppImage executable and run it, or unpack the
-  tarball and run its `install.sh` (installs into `~/.local`; `--uninstall`
+- **Any distribution:** make the AppImage executable and run it (it carries its
+  own GTK and libadwaita, so this works on older distributions too), or unpack
+  the tarball and run its `install.sh` (installs into `~/.local`; `--uninstall`
   removes it).
 
 Then start **Android Rapid Transfer** from the app launcher (an AppImage runs

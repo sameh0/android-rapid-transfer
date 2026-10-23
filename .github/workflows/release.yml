@@ -378,8 +378,10 @@ jobs:
             echo "<!-- linux -->"
             echo "### Linux"
             echo
-            echo "AppImage, tarball, .deb and .rpm for x86_64 and aarch64. They need GTK $gtk,"
-            echo "libadwaita $adwaita and glibc $glibc or later (Ubuntu 26.04, Fedora 44 or newer)."
+            echo "AppImage, tarball, .deb and .rpm for x86_64 and aarch64. The tarball, .deb and"
+            echo ".rpm need GTK $gtk, libadwaita $adwaita and glibc $glibc or later (Ubuntu 26.04,"
+            echo "Fedora 44 or newer). The AppImage brings its own GTK, libadwaita and glibc, so it"
+            echo "also runs on older distributions such as Ubuntu 22.04 and Debian 12."
             echo
             echo '```'
             cat SHA256SUMS-linux-*

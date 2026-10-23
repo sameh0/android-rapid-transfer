@@ -7,8 +7,9 @@
 #   tarball   Android-Rapid-Transfer-<version>-linux-<arch>.tar.gz: bin/, share/,
 #             lib/udev/ and install.sh (Scripts/linux-install.sh) in one folder
 #   appimage  Android-Rapid-Transfer-<version>-<arch>.AppImage (+ .zsync), with
-#             the static type2 runtime: no FUSE 2 needed. It uses the system's
-#             GTK 4 and libadwaita rather than bundling them.
+#             the static type2 runtime: no FUSE 2 needed. Unlike the others it
+#             bundles GTK 4, libadwaita and glibc (see make_appimage), so it
+#             runs on older distributions too.
 #   deb       android-rapid-transfer_<version>-1_<arch>.deb (nfpm)
 #   rpm       android-rapid-transfer-<version>-1.<arch>.rpm (nfpm)
 #   all       all four
@@ -16,7 +17,8 @@
 #   --stage    the staged tree (default dist/stage; built by linux-build.sh if missing)
 #   --output   where the artifacts go (default dist)
 #
-# appimagetool, its runtime and nfpm are downloaded once, pinned by checksum
+# appimagetool, its runtime, quick-sharun (with sharun and cross-libc-dlopen)
+# and nfpm are downloaded once, pinned by checksum
 # (Scripts/linux-tools.sh); an nfpm on PATH is used when it is the pinned
 # version. Every artifact is checked after it is made.
 #
@@ -139,27 +141,146 @@ README
 
 # --- AppImage -------------------------------------------------------------------
 
+# The AppImage brings its own libraries, glibc included, so it starts on
+# distributions older than the packages need (Ubuntu 22.04 has glibc 2.35,
+# GTK 4.6 and libadwaita 1.1). quick-sharun collects them from this machine:
+# what ldd reports, what the app dlopens during a short --mock run under Xvfb
+# (gdk-pixbuf loaders, GIO modules, ...), and the data those libraries read
+# (GSettings schemas, the MIME database, XKB, fonts.conf). sharun then starts
+# the binary with the bundled dynamic loader and points GTK, GLib and
+# fontconfig at the bundled files. The AppDir:
+#
+#   AppRun, sharun, dash      sharun; as AppRun it runs AppRun.sh with dash
+#   AppRun.sh, AppRun.lib     quick-sharun's launcher and the hooks it sources
+#   bin/<executable>          sharun again: starts shared/bin/<executable>
+#   shared/bin/<executable>   the staged binary, unchanged
+#   lib/                      the libraries, ld-linux and the dlopened modules
+#   share/, etc/              their data, the Adwaita icons, and ours (desktop
+#                             entry, metainfo, icons, docs)
+#   usr -> .                  so usr/share/metainfo, usr/lib/udev/rules.d and
+#                             usr/bin/<executable> are where tools look
+#
+# No GPU driver is bundled (USE_HOST_DRIVERS_EXPERIMENTAL): cross-libc-dlopen
+# lets the bundled glibc load the system's Mesa or NVIDIA GL and Vulkan
+# drivers, so GTK renders with them where there are some (llvmpipe under Xvfb
+# included), and falls back to its cairo renderer where there are none.
+# Bundling Mesa would add about 100 MB (llvmpipe links LLVM) and ship
+# drivers older than the GPUs they would run on.
+#
+# The fonts, the cursor theme and the portals stay the system's.
+
+# What the AppDir must hold (paths relative to it).
+APPDIR_EXPECTED=(
+    AppRun AppRun.sh sharun .env .DirIcon
+    "$LINUX_APP_ID.desktop" "$LINUX_APP_ID.png"
+    "bin/$LINUX_EXECUTABLE" "shared/bin/$LINUX_EXECUTABLE"
+    lib/libc.so.6 lib/libgtk-4.so.1 lib/libadwaita-1.so.0
+    lib/sharun-preload/cross-libc-dlopen.so
+    share/glib-2.0/schemas/gschemas.compiled
+    share/icons/Adwaita/index.theme
+    "usr/bin/$LINUX_EXECUTABLE"
+    "usr/share/metainfo/$LINUX_APP_ID.metainfo.xml"
+    "usr/share/icons/hicolor/scalable/apps/$LINUX_APP_ID.svg"
+    "usr/lib/udev/rules.d/70-$LINUX_PACKAGE_NAME.rules"
+)
+
+# The SHA-256 Scripts/linux-tools.sh pins for a tool.
+pinned_sha256() {
+    local spec
+    spec=$(tool_spec "$1")
+    echo "${spec##* }"
+}
+
+# Fills the AppDir: quick-sharun, then our data files and the Adwaita icons.
+make_appdir() {
+    local appdir=$1 work=$2 qs sharun_tar cld_tar name
+    qs=$(fetch_tool quick_sharun)
+    sharun_tar=$(fetch_tool "sharun_$ARCH")
+    cld_tar=$(fetch_tool "cross_libc_dlopen_$ARCH")
+    # quick-sharun checks what it downloads against checksums of its own:
+    # Scripts/linux-tools.sh must pin the same files.
+    for name in "sharun_$ARCH" "cross_libc_dlopen_$ARCH"; do
+        grep -q "=$(pinned_sha256 "$name")\$" "$qs" \
+            || fail "Scripts/linux-tools.sh pins another $name than quick-sharun expects; update them together"
+    done
+    command -v patchelf >/dev/null || fail "quick-sharun needs patchelf"
+    command -v xvfb-run >/dev/null || fail "quick-sharun needs xvfb-run, to see what the app dlopens"
+
+    # quick-sharun downloads nothing when sharun is in the AppDir and the
+    # tarballs are in its TMPDIR.
+    mkdir -p "$appdir/share/licenses" "$work/tmp"
+    cp "$sharun_tar" "$work/tmp/sharun+helper-libs-$ARCH.tar"
+    cp "$cld_tar" "$work/tmp/cross-libc-dlopen-$ARCH.tar"
+    tar -xf "$sharun_tar" -C "$appdir" sharun dash
+    tar -xf "$sharun_tar" -C "$appdir/share/licenses" dash-COPYING
+
+    # DEPLOY_DATADIR=0, DEPLOY_LOCALE=0: our data files are copied below, not
+    # looked up in /usr/share. GTK's own translations stay the system's, as
+    # for the packages.
+    (
+        cd "$work"
+        export APPDIR="$appdir" TMPDIR="$work/tmp" APPIMAGE_ARCH="$ARCH"
+        export DESKTOP="$STAGE/usr/share/applications/$LINUX_APP_ID.desktop"
+        export ICON="$STAGE/usr/share/icons/hicolor/256x256/apps/$LINUX_APP_ID.png"
+        export USE_HOST_DRIVERS_EXPERIMENTAL=1 DEPLOY_DATADIR=0 DEPLOY_LOCALE=0
+        export STRACE_FLAGS=--mock STRACE_TIME=10
+        sh "$qs" "$BINARY"
+    ) || fail "quick-sharun failed"
+
+    # quick-sharun strips the binary and may rewrite paths in it; ship the
+    # staged one as it is.
+    install -m755 "$BINARY" "$appdir/shared/bin/$LINUX_EXECUTABLE"
+    # It also copies Mesa's GBM backend, which needs the driver library that
+    # is left out (libgallium); without it, libgbm loads the system's.
+    rm -rf "$appdir/lib/gbm"
+    cp -a "$STAGE/usr/share/." "$appdir/share/"
+    mkdir -p "$appdir/lib/udev"
+    cp -a "$STAGE/usr/lib/udev/." "$appdir/lib/udev/"
+    # The symbolic icons the app uses come from the Adwaita theme (GTK only
+    # has a few built in); the system's may be missing or older. The cursors
+    # are left out (12 MB, and the system has its own).
+    local adwaita=/usr/share/icons/Adwaita entry
+    [[ -f "$adwaita/index.theme" ]] || fail "No Adwaita icon theme in $adwaita (install adwaita-icon-theme)"
+    mkdir -p "$appdir/share/icons/Adwaita"
+    for entry in "$adwaita"/*; do
+        case "${entry##*/}" in
+            cursors | cursor.theme) ;;
+            *) cp -a "$entry" "$appdir/share/icons/Adwaita/" ;;
+        esac
+    done
+    ln -s . "$appdir/usr"
+
+    for name in "${APPDIR_EXPECTED[@]}"; do
+        [[ -e "$appdir/$name" ]] || fail "The AppDir has no $name"
+    done
+}
+
+# Every library the binaries in an AppDir need must be in it (lib/ or a
+# subdirectory sharun puts on the library path).
+check_appdir_closure() {
+    local root=$1 needed missing=()
+    while IFS= read -r needed; do
+        [[ -n "$(find "$root/lib/" -name "$needed" -print -quit)" ]] || missing+=("$needed")
+    done < <(find "$root/shared/bin" "$root/lib" -type f -exec sh -c '
+        for f; do
+            [ "$(head -c 4 "$f")" = "$(printf "\177ELF")" ] || continue
+            readelf -d "$f" 2>/dev/null | sed -n "s/.*(NEEDED).*\[\(.*\)\]/\1/p"
+        done' sh {} + | sort -u)
+    [[ ${#missing[@]} -eq 0 ]] || fail "The AppImage lacks libraries its binaries need: ${missing[*]}"
+}
+
 make_appimage() {
     local name="$LINUX_ARTIFACT_NAME-$VERSION-$ARCH.AppImage"
-    local appimage="$OUTPUT/$name" appdir tool runtime
+    local appimage="$OUTPUT/$name" work appdir tool runtime
     note "Making $name..."
     tool=$(fetch_tool "appimagetool_$ARCH")
     runtime=$(fetch_tool "appimage_runtime_$ARCH")
     chmod +x "$tool"
 
-    appdir=$(mktemp -d)/AppDir
+    work=$(mktemp -d)
+    appdir="$work/AppDir"
     mkdir -p "$appdir"
-    cp -a "$STAGE/usr" "$appdir/usr"
-    cat >"$appdir/AppRun" <<'APPRUN'
-#!/bin/sh
-# The app needs the system's GTK 4 and libadwaita (they are not bundled).
-HERE=$(dirname "$(readlink -f "$0")")
-exec "$HERE/usr/bin/android-rapid-transfer" "$@"
-APPRUN
-    chmod 755 "$appdir/AppRun"
-    cp "$STAGE/usr/share/applications/$LINUX_APP_ID.desktop" "$appdir/"
-    cp "$STAGE/usr/share/icons/hicolor/scalable/apps/$LINUX_APP_ID.svg" "$appdir/"
-    cp "$STAGE/usr/share/icons/hicolor/256x256/apps/$LINUX_APP_ID.png" "$appdir/.DirIcon"
+    make_appdir "$appdir" "$work"
 
     rm -f "$appimage" "$appimage.zsync"
     # APPIMAGE_EXTRACT_AND_RUN: appimagetool is itself an AppImage, and CI
@@ -172,20 +293,24 @@ APPRUN
             --updateinformation "gh-releases-zsync|sameh0|android-rapid-transfer|latest|$LINUX_ARTIFACT_NAME-*-$ARCH.AppImage.zsync" \
             "$appdir" "$appimage"
     ) || fail "appimagetool failed"
-    rm -rf "$(dirname "$appdir")"
+    rm -rf "$work"
 
     # Check: the runtime and the payload.
     [[ -x "$appimage" ]] || fail "$name is missing or not executable"
-    local work
+    local root path
     work=$(mktemp -d)
     (cd "$work" && "$appimage" --appimage-extract >/dev/null) || fail "$name --appimage-extract failed"
-    [[ -x "$work/squashfs-root/usr/bin/$LINUX_EXECUTABLE" && -x "$work/squashfs-root/AppRun" ]] \
-        || fail "$name does not contain AppRun and usr/bin/$LINUX_EXECUTABLE"
-    cmp -s "$work/squashfs-root/usr/bin/$LINUX_EXECUTABLE" "$BINARY" || fail "$name holds a different binary"
+    root="$work/squashfs-root"
+    for path in "${APPDIR_EXPECTED[@]}"; do
+        [[ -e "$root/$path" ]] || fail "$name has no $path"
+    done
+    [[ -x "$root/AppRun" && -x "$root/usr/bin/$LINUX_EXECUTABLE" ]] || fail "$name: AppRun or usr/bin/$LINUX_EXECUTABLE is not executable"
+    cmp -s "$root/shared/bin/$LINUX_EXECUTABLE" "$BINARY" || fail "$name holds a different binary"
+    check_appdir_closure "$root"
     rm -rf "$work"
     "$appimage" --appimage-updateinformation | grep -q '^gh-releases-zsync|' \
         || fail "$name has no update information"
-    ok "$name: runtime, payload and update information"
+    ok "$name: runtime, payload, library closure and update information"
 }
 
 # --- deb / rpm ------------------------------------------------------------------
