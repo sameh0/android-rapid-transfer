@@ -6,7 +6,8 @@
 
 <p align="center">
   <strong>Plug in your Android™ phone. Drag your files. Done.</strong><br>
-  A fast, native, open-source app for Mac and Linux that moves photos, videos and files between an Android phone and your computer over USB.
+  A fast, native, open-source app for Mac and Linux that moves photos, videos and files between an Android phone and your computer over USB.<br>
+  It works with Garmin devices and other MTP devices too.
 </p>
 
 <p align="center">
@@ -60,8 +61,20 @@ interface (see [Linux](#linux)).
   your Mac's folders alongside it in the same window. Folders slide in as you open
   them; breadcrumbs, back and up work the way Finder does.
 - **Copy either way in one click.** Select files and click **Copy to Phone** or
-  **Copy to Computer**, drag them to and from Finder, or collect files from
-  several folders with **Add to Copy Queue** and paste them where they belong.
+  **Copy to Computer**, or drag them to and from Finder.
+- **A copy queue for files from many folders.** Select files and press ⌘C to
+  start the queue, then keep going: **Copy Selection to Queue** (⇧⌘C) adds more
+  from any other folder. The queue panel shows every item and the total size,
+  and any item can be taken out again. Open the folder you want them in and
+  press ⌘V, or click **Copy to Mac…** to pick a folder and copy everything there,
+  keeping the phone's folder structure.
+- **Copy by date range.** Select one or more folders on the phone (DCIM, say,
+  or Download), choose **Copy by Date Range…** and pick the dates the files were
+  last modified: the last five days, a single week of holiday, or everything
+  since a given day (it starts at the last seven days). The phone is scanned
+  with a live list of what matches; then untick any files you don't want and
+  copy the rest, folder structure intact. Dot files, cache files and file
+  types you choose (`.log`, `.nomedia` and so on) can be skipped.
 - **Live progress you can trust.** Every copy shows files done, bytes, speed and
   time left, puts overall progress in the Dock, and ends with a small
   celebration. It keeps running in the background and posts a notification when
@@ -73,8 +86,8 @@ interface (see [Linux](#linux)).
 - **Manage files on both sides.** Create folders, rename, delete (to the Trash
   on the Mac; permanently on the phone, after asking), see file info and show
   hidden files.
-- **Copy by date range.** Pick a range and copy just the photos and videos from
-  it, with a live preview while the phone is scanned.
+- **Not just phones.** Other devices that connect over MTP work too, Garmin
+  watches and other Garmin devices among them.
 - **Knows when you plug in.** The phone is picked up as soon as it's connected,
   with a connection screen that walks you through unlocking it and choosing File
   transfer, and a friendly note when something needs your attention.
@@ -199,8 +212,8 @@ brew install --cask sameh0/tap/android-rapid-transfer
 The app updates itself, so `brew upgrade` skips it unless you add `--greedy`.
 
 **Requirements:** macOS 14 Sonoma or later on Apple silicon or Intel, an Android
-phone (or another MTP device), and a USB cable that carries data. Some cables only
-charge.
+phone or another MTP device (a Garmin watch, for example), and a USB cable that
+carries data. Some cables only charge.
 
 ### On Linux
 
