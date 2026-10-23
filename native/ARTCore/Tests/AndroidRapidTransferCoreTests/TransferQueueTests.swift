@@ -6,10 +6,13 @@ import XCTest
 @MainActor
 final class TransferQueueTests: XCTestCase {
     func testTransfersExecuteStrictlySerially() async throws {
+        // The first transfer stays active until the gate opens, so the check
+        // below does not depend on how fast the runner is.
+        let firstTransferGate = MockTransferGate()
         let provider = MockMTPProvider(
             entries: [Self.deviceFile],
             transferScripts: [
-                MockTransferScript(completionDelay: .milliseconds(120)),
+                MockTransferScript(completionGate: firstTransferGate),
                 MockTransferScript()
             ]
         )
@@ -26,6 +29,7 @@ final class TransferQueueTests: XCTestCase {
         XCTAssertEqual(callsWhileFirstActive, [.downloadFiles])
         XCTAssertEqual(secondStateWhileFirstActive, .queued)
 
+        await firstTransferGate.open()
         try await waitUntil {
             let downloadState = await self.state(of: downloadId, in: queue)
             let uploadState = await self.state(of: uploadId, in: queue)
