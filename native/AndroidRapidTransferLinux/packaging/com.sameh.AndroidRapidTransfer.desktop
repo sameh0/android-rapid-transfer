@@ -11,4 +11,3 @@ Categories=Utility;FileTransfer;GTK;
 Keywords=Android;phone;MTP;USB;transfer;photos;files;copy;camera;
 StartupNotify=true
 StartupWMClass=com.sameh.AndroidRapidTransfer
-SingleMainWindow=true
